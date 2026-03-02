@@ -1,8 +1,7 @@
 const path = require('path');
-const mongoose = require('mongoose');
 const { checkEmailConfig } = require('@librechat/api');
-const { User } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
+const { findUser } = require('~/models');
 const { askQuestion, silentExit } = require('./helpers');
 const { createInvite } = require('~/models/inviteUser');
 const { sendEmail } = require('~/server/utils');
@@ -21,13 +20,11 @@ const connect = require('./connect');
     console.purple('--------------------------');
   }
 
-  // Check if email service is enabled
   if (!checkEmailConfig()) {
     console.red('Error: Email service is not enabled!');
     silentExit(1);
   }
 
-  // Get the email of the user to be invited
   let email = '';
   if (process.argv.length >= 3) {
     email = process.argv[2];
@@ -35,14 +32,12 @@ const connect = require('./connect');
   if (!email) {
     email = await askQuestion('Email:');
   }
-  // Validate the email
   if (!email.includes('@')) {
     console.red('Error: Invalid email address!');
     silentExit(1);
   }
 
-  // Check if the user already exists
-  const userExists = await User.findOne({ email });
+  const userExists = await findUser({ email });
   if (userExists) {
     console.red('Error: A user with that email already exists!');
     silentExit(1);
@@ -74,7 +69,6 @@ const connect = require('./connect');
     silentExit(1);
   }
 
-  // Done!
   console.green('Invitation sent successfully!');
   silentExit(0);
 })();

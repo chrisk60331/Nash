@@ -1,5 +1,2 @@
-const mongoose = require('mongoose');
-const { createModels } = require('@librechat/data-schemas');
-const models = createModels(mongoose);
-
-module.exports = { ...models };
+/** @deprecated MongoDB removed — all models are now Backboard-backed via ~/models */
+module.exports = {};

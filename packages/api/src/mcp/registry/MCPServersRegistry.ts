@@ -31,8 +31,8 @@ export class MCPServersRegistry {
     Promise<Record<string, t.ParsedServerConfig>>
   >();
 
-  constructor(mongoose: typeof import('mongoose'), allowedDomains?: string[] | null) {
-    this.dbConfigsRepo = new ServerConfigsDB(mongoose);
+  constructor(_mongoose?: unknown, allowedDomains?: string[] | null) {
+    this.dbConfigsRepo = new ServerConfigsDB();
     this.cacheConfigsRepo = ServerConfigsCacheFactory.create('App', false);
     this.allowedDomains = allowedDomains;
 
@@ -51,21 +51,15 @@ export class MCPServersRegistry {
 
   /** Creates and initializes the singleton MCPServersRegistry instance */
   public static createInstance(
-    mongoose: typeof import('mongoose'),
+    _mongooseOrNull?: unknown,
     allowedDomains?: string[] | null,
   ): MCPServersRegistry {
-    if (!mongoose) {
-      throw new Error(
-        'MCPServersRegistry creation failed: mongoose instance is required for database operations. ' +
-          'Ensure mongoose is initialized before creating the registry.',
-      );
-    }
     if (MCPServersRegistry.instance) {
       logger.debug('[MCPServersRegistry] Returning existing instance');
       return MCPServersRegistry.instance;
     }
     logger.info('[MCPServersRegistry] Creating new instance');
-    MCPServersRegistry.instance = new MCPServersRegistry(mongoose, allowedDomains);
+    MCPServersRegistry.instance = new MCPServersRegistry(null, allowedDomains);
     return MCPServersRegistry.instance;
   }
 

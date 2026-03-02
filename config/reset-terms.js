@@ -1,7 +1,6 @@
 const path = require('path');
-const mongoose = require('mongoose');
-const { User } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
+const { searchUsers, updateUser } = require('~/models');
 const { askQuestion, silentExit } = require('./helpers');
 const connect = require('./connect');
 
@@ -21,8 +20,15 @@ const connect = require('./connect');
   }
 
   try {
-    const result = await User.updateMany({}, { $set: { termsAccepted: false } });
-    console.green(`Updated ${result.modifiedCount} user(s).`);
+    const users = await searchUsers('');
+    let updatedCount = 0;
+
+    for (const user of users) {
+      await updateUser(user._id, { termsAccepted: false });
+      updatedCount++;
+    }
+
+    console.green(`Updated ${updatedCount} user(s).`);
   } catch (error) {
     console.red('Error resetting terms acceptance:', error);
     silentExit(1);

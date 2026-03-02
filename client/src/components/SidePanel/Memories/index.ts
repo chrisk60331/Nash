@@ -6,5 +6,6 @@ export { default as MemoryCardActions } from './MemoryCardActions';
 export { default as MemoryUsageBadge } from './MemoryUsageBadge';
 export { default as MemoryEmptyState } from './MemoryEmptyState';
 export { default as MemoryEditDialog } from './MemoryEditDialog';
+export { default as MemoryImportDialog } from './MemoryImportDialog';
 export { default as MemoryCreateDialog } from './MemoryCreateDialog';
 export { default as AdminSettings } from './AdminSettings';

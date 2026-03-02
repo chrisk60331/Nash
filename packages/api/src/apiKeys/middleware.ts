@@ -2,36 +2,35 @@ import { logger } from '@librechat/data-schemas';
 import { ResourceType, PermissionBits, hasPermissions } from 'librechat-data-provider';
 import type { Request, Response, NextFunction } from 'express';
 import type { IUser } from '@librechat/data-schemas';
-import type { Types } from 'mongoose';
 import { getRemoteAgentPermissions } from './service';
 
 export interface ApiKeyAuthDependencies {
   validateAgentApiKey: (apiKey: string) => Promise<{
-    userId: Types.ObjectId;
-    keyId: Types.ObjectId;
+    userId: string;
+    keyId: string;
   } | null>;
-  findUser: (query: { _id: string | Types.ObjectId }) => Promise<IUser | null>;
+  findUser: (query: { _id: string }) => Promise<IUser | null>;
 }
 
 export interface RemoteAgentAccessDependencies {
   getAgent: (query: {
     id: string;
-  }) => Promise<{ _id: Types.ObjectId; [key: string]: unknown } | null>;
+  }) => Promise<{ _id: string; [key: string]: unknown } | null>;
   getEffectivePermissions: (params: {
     userId: string;
     role?: string;
     resourceType: ResourceType;
-    resourceId: string | Types.ObjectId;
+    resourceId: string;
   }) => Promise<number>;
 }
 
 export interface ApiKeyAuthRequest extends Request {
   user?: IUser & { id: string };
-  apiKeyId?: Types.ObjectId;
+  apiKeyId?: string;
 }
 
 export interface RemoteAgentAccessRequest extends ApiKeyAuthRequest {
-  agent?: { _id: Types.ObjectId; [key: string]: unknown };
+  agent?: { _id: string; [key: string]: unknown };
   agentPermissions?: number;
 }
 
@@ -86,7 +85,8 @@ export function createRequireApiKeyAuth(deps: ApiKeyAuthDependencies) {
         });
       }
 
-      user.id = (user._id as Types.ObjectId).toString();
+      const userId = typeof user._id === 'string' ? user._id : String(user._id);
+      user.id = userId;
       req.user = user as IUser & { id: string };
       req.apiKeyId = keyValidation.keyId;
 

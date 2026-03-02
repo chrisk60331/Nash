@@ -1,13 +1,8 @@
 import { Providers } from '@librechat/agents';
-import { EModelEndpoint } from 'librechat-data-provider';
 import type { TEndpoint } from 'librechat-data-provider';
 import type { AppConfig } from '@librechat/data-schemas';
 import type { BaseInitializeParams, InitializeResultBase } from '~/types';
-import { initializeAnthropic } from './anthropic/initialize';
-import { initializeBedrock } from './bedrock/initialize';
 import { initializeCustom } from './custom/initialize';
-import { initializeGoogle } from './google/initialize';
-import { initializeOpenAI } from './openai/initialize';
 import { getCustomEndpointConfig } from '~/app/config';
 
 /**
@@ -27,18 +22,13 @@ export function isKnownCustomProvider(provider?: string): boolean {
 }
 
 /**
- * Provider configuration map mapping providers to their initialization functions
+ * All providers route through initializeCustom (Backboard handles all LLM access)
  */
 export const providerConfigMap: Record<string, InitializeFn> = {
   [Providers.XAI]: initializeCustom,
   [Providers.DEEPSEEK]: initializeCustom,
   [Providers.MOONSHOT]: initializeCustom,
   [Providers.OPENROUTER]: initializeCustom,
-  [EModelEndpoint.openAI]: initializeOpenAI,
-  [EModelEndpoint.google]: initializeGoogle,
-  [EModelEndpoint.bedrock]: initializeBedrock,
-  [EModelEndpoint.azureOpenAI]: initializeOpenAI,
-  [EModelEndpoint.anthropic]: initializeAnthropic,
 };
 
 /**

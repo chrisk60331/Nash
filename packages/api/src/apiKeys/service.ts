@@ -1,21 +1,27 @@
-import { createMethods } from '@librechat/data-schemas';
 import { ResourceType, PermissionBits, hasPermissions } from 'librechat-data-provider';
-import type { AllMethods, IUser } from '@librechat/data-schemas';
-import type { Types } from 'mongoose';
+import type { IUser } from '@librechat/data-schemas';
+import {
+  validateAgentApiKeyBB,
+  createAgentApiKeyBB,
+  listAgentApiKeysBB,
+  deleteAgentApiKeyBB,
+  getAgentApiKeyByIdBB,
+} from '../backboard/agentApiKeysBB';
+import { findUserBB } from '../backboard/auth/usersBB';
 
 export interface ApiKeyServiceDependencies {
-  validateAgentApiKey: AllMethods['validateAgentApiKey'];
-  createAgentApiKey: AllMethods['createAgentApiKey'];
-  listAgentApiKeys: AllMethods['listAgentApiKeys'];
-  deleteAgentApiKey: AllMethods['deleteAgentApiKey'];
-  getAgentApiKeyById: AllMethods['getAgentApiKeyById'];
-  findUser: (query: { _id: string | Types.ObjectId }) => Promise<IUser | null>;
+  validateAgentApiKey: typeof validateAgentApiKeyBB;
+  createAgentApiKey: typeof createAgentApiKeyBB;
+  listAgentApiKeys: typeof listAgentApiKeysBB;
+  deleteAgentApiKey: typeof deleteAgentApiKeyBB;
+  getAgentApiKeyById: typeof getAgentApiKeyByIdBB;
+  findUser: (query: { _id: string }) => Promise<IUser | null>;
 }
 
 export interface RemoteAgentAccessResult {
   hasAccess: boolean;
   permissions: number;
-  agent: { _id: Types.ObjectId; [key: string]: unknown } | null;
+  agent: { _id: string; [key: string]: unknown } | null;
 }
 
 export class AgentApiKeyService {
@@ -26,30 +32,31 @@ export class AgentApiKeyService {
   }
 
   async validateApiKey(apiKey: string): Promise<{
-    userId: Types.ObjectId;
-    keyId: Types.ObjectId;
+    userId: string;
+    keyId: string;
   } | null> {
     return this.deps.validateAgentApiKey(apiKey);
   }
 
   async createApiKey(params: {
-    userId: string | Types.ObjectId;
+    userId: string;
     name: string;
     expiresAt?: Date | null;
   }) {
     return this.deps.createAgentApiKey(params);
   }
 
-  async listApiKeys(userId: string | Types.ObjectId) {
+  async listApiKeys(userId: string) {
     return this.deps.listAgentApiKeys(userId);
   }
 
-  async deleteApiKey(keyId: string | Types.ObjectId, userId: string | Types.ObjectId) {
-    return this.deps.deleteAgentApiKey(keyId, userId);
+  async deleteApiKey(keyId: string, userId: string) {
+    return this.deps.deleteAgentApiKey(userId, keyId);
   }
 
-  async getApiKeyById(keyId: string | Types.ObjectId, userId: string | Types.ObjectId) {
-    return this.deps.getAgentApiKeyById(keyId, userId);
+  async getApiKeyById(keyId: string, userId: string) {
+    void userId;
+    return this.deps.getAgentApiKeyById(keyId);
   }
 
   async getUserFromApiKey(apiKey: string): Promise<IUser | null> {
@@ -62,17 +69,14 @@ export class AgentApiKeyService {
   }
 }
 
-export function createApiKeyServiceDependencies(
-  mongoose: typeof import('mongoose'),
-): ApiKeyServiceDependencies {
-  const methods = createMethods(mongoose);
+export function createApiKeyServiceDependencies(): ApiKeyServiceDependencies {
   return {
-    validateAgentApiKey: methods.validateAgentApiKey,
-    createAgentApiKey: methods.createAgentApiKey,
-    listAgentApiKeys: methods.listAgentApiKeys,
-    deleteAgentApiKey: methods.deleteAgentApiKey,
-    getAgentApiKeyById: methods.getAgentApiKeyById,
-    findUser: methods.findUser,
+    validateAgentApiKey: validateAgentApiKeyBB,
+    createAgentApiKey: createAgentApiKeyBB,
+    listAgentApiKeys: listAgentApiKeysBB,
+    deleteAgentApiKey: deleteAgentApiKeyBB,
+    getAgentApiKeyById: getAgentApiKeyByIdBB,
+    findUser: (query: { _id: string }) => findUserBB(query) as Promise<IUser | null>,
   };
 }
 
@@ -81,7 +85,7 @@ export interface GetRemoteAgentPermissionsDeps {
     userId: string;
     role?: string;
     resourceType: ResourceType;
-    resourceId: string | Types.ObjectId;
+    resourceId: string;
   }) => Promise<number>;
 }
 
@@ -90,7 +94,7 @@ export async function getRemoteAgentPermissions(
   deps: GetRemoteAgentPermissionsDeps,
   userId: string,
   role: string | undefined,
-  resourceId: string | Types.ObjectId,
+  resourceId: string,
 ): Promise<number> {
   const agentPerms = await deps.getEffectivePermissions({
     userId,
@@ -117,12 +121,12 @@ export async function checkRemoteAgentAccess(params: {
   agentId: string;
   getAgent: (query: {
     id: string;
-  }) => Promise<{ _id: Types.ObjectId; [key: string]: unknown } | null>;
+  }) => Promise<{ _id: string; [key: string]: unknown } | null>;
   getEffectivePermissions: (params: {
     userId: string;
     role?: string;
     resourceType: ResourceType;
-    resourceId: string | Types.ObjectId;
+    resourceId: string;
   }) => Promise<number>;
 }): Promise<RemoteAgentAccessResult> {
   const { userId, role, agentId, getAgent, getEffectivePermissions } = params;

@@ -1,45 +1,21 @@
 #!/usr/bin/env node
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
 const path = require('path');
-const mongoose = require('mongoose');
-const {
-  Key,
-  User,
-  File,
-  Agent,
-  Token,
-  Group,
-  Action,
-  Preset,
-  Prompt,
-  Balance,
-  Message,
-  Session,
-  AclEntry,
-  ToolCall,
-  Assistant,
-  SharedLink,
-  PluginAuth,
-  MemoryEntry,
-  PromptGroup,
-  AgentApiKey,
-  Transaction,
-  Conversation,
-  ConversationTag,
-} = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
+const {
+  findUser,
+  deleteUserById,
+  deleteConvos,
+  deleteMessages,
+  deletePresets,
+  deleteFiles,
+  deleteTokens,
+  deleteAllUserSessions,
+  deleteAllSharedLinks,
+  deleteAllUserPluginAuths,
+  deleteAllAgentApiKeys,
+} = require('~/models');
 const { askQuestion, silentExit } = require('./helpers');
 const connect = require('./connect');
-
-async function gracefulExit(code = 0) {
-  try {
-    await mongoose.disconnect();
-  } catch (err) {
-    console.error('Error disconnecting from MongoDB:', err);
-  }
-  silentExit(code);
-}
 
 (async () => {
   await connect();
@@ -48,81 +24,54 @@ async function gracefulExit(code = 0) {
   console.purple('Deleting a user and all related data');
   console.purple('---------------');
 
-  // 1) Get email
   let email = process.argv[2]?.trim();
   if (!email) {
     email = (await askQuestion('Email:')).trim();
   }
 
-  // 2) Find user
-  const user = await User.findOne({ email: email.toLowerCase() });
+  const user = await findUser({ email: email.toLowerCase() });
   if (!user) {
     console.yellow(`No user found with email "${email}"`);
-    return gracefulExit(0);
+    silentExit(0);
   }
 
-  // 3) Confirm full deletion
   const confirmAll = await askQuestion(
     `Really delete user ${user.email} (${user._id}) and ALL their data? (y/N)`,
   );
   if (confirmAll.toLowerCase() !== 'y') {
     console.yellow('Aborted.');
-    return gracefulExit(0);
+    silentExit(0);
   }
-
-  // 4) Ask specifically about transactions
-  const confirmTx = await askQuestion('Also delete all transaction history for this user? (y/N)');
-  const deleteTx = confirmTx.toLowerCase() === 'y';
 
   const uid = user._id.toString();
 
-  // 5) Build and run deletion tasks
-  const tasks = [
-    Action.deleteMany({ user: uid }),
-    Agent.deleteMany({ author: uid }),
-    AgentApiKey.deleteMany({ user: uid }),
-    Assistant.deleteMany({ user: uid }),
-    Balance.deleteMany({ user: uid }),
-    ConversationTag.deleteMany({ user: uid }),
-    Conversation.deleteMany({ user: uid }),
-    Message.deleteMany({ user: uid }),
-    File.deleteMany({ user: uid }),
-    Key.deleteMany({ userId: uid }),
-    MemoryEntry.deleteMany({ userId: uid }),
-    PluginAuth.deleteMany({ userId: uid }),
-    Prompt.deleteMany({ author: uid }),
-    PromptGroup.deleteMany({ author: uid }),
-    Preset.deleteMany({ user: uid }),
-    Session.deleteMany({ user: uid }),
-    SharedLink.deleteMany({ user: uid }),
-    ToolCall.deleteMany({ user: uid }),
-    Token.deleteMany({ userId: uid }),
-    AclEntry.deleteMany({ principalId: user._id }),
-  ];
+  try {
+    await Promise.all([
+      deleteConvos(uid, []),
+      deleteMessages({ user: uid }),
+      deletePresets(uid),
+      deleteFiles({ user: uid }),
+      deleteTokens({ userId: uid }),
+      deleteAllUserSessions(uid),
+      deleteAllSharedLinks(uid),
+      deleteAllUserPluginAuths(uid),
+      deleteAllAgentApiKeys(uid),
+    ]);
 
-  if (deleteTx) {
-    tasks.push(Transaction.deleteMany({ user: uid }));
+    await deleteUserById(uid);
+
+    console.green(`Successfully deleted user ${email} and all associated data.`);
+  } catch (error) {
+    console.red('Error deleting user: ' + error.message);
+    console.error(error);
+    silentExit(1);
   }
 
-  await Promise.all(tasks);
-
-  // 6) Remove user from all groups
-  await Group.updateMany({ memberIds: user._id }, { $pull: { memberIds: user._id } });
-
-  // 7) Finally delete the user document itself
-  await User.deleteOne({ _id: uid });
-
-  console.green(`✔ Successfully deleted user ${email} and all associated data.`);
-  if (!deleteTx) {
-    console.yellow('⚠️ Transaction history was retained.');
-  }
-
-  return gracefulExit(0);
-})().catch(async (err) => {
+  silentExit(0);
+})().catch((err) => {
   if (!err.message.includes('fetch failed')) {
     console.error('There was an uncaught error:');
     console.error(err);
-    await mongoose.disconnect();
     process.exit(1);
   }
 });

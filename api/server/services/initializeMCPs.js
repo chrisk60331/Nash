@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const { logger } = require('@librechat/data-schemas');
 const { mergeAppTools, getAppConfig } = require('./Config');
 const { createMCPServersRegistry, createMCPManager } = require('~/config');
@@ -11,7 +10,7 @@ async function initializeMCPs() {
   const mcpServers = appConfig.mcpConfig;
 
   try {
-    createMCPServersRegistry(mongoose, appConfig?.mcpSettings?.allowedDomains);
+    createMCPServersRegistry(null, appConfig?.mcpSettings?.allowedDomains);
   } catch (error) {
     logger.error('[MCP] Failed to initialize MCPServersRegistry:', error);
     throw error;

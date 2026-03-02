@@ -19,7 +19,7 @@ const { logoutController } = require('~/server/controllers/auth/LogoutController
 const { loginController } = require('~/server/controllers/auth/LoginController');
 const { getAppConfig } = require('~/server/services/Config');
 const middleware = require('~/server/middleware');
-const { Balance } = require('~/db/models');
+const { Balance } = require('~/models');
 
 const setBalanceConfig = createSetBalanceConfig({
   getAppConfig,

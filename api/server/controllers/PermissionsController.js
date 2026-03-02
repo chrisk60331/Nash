@@ -2,10 +2,8 @@
  * @import { TUpdateResourcePermissionsRequest, TUpdateResourcePermissionsResponse } from 'librechat-data-provider'
  */
 
-const mongoose = require('mongoose');
 const { logger } = require('@librechat/data-schemas');
 const { ResourceType, PrincipalType, PermissionBits } = require('librechat-data-provider');
-const { enrichRemoteAgentPrincipals, backfillRemoteAgentPermissions } = require('@librechat/api');
 const {
   bulkUpdateResourcePermissions,
   ensureGroupPrincipalExists,
@@ -19,12 +17,15 @@ const {
   searchPrincipals: searchLocalPrincipals,
   sortPrincipalsByRelevance,
   calculateRelevanceScore,
+  findEntriesByResource,
+  findRolesByResourceType,
+  getUserById,
+  findGroupById,
 } = require('~/models');
 const {
   entraIdPrincipalFeatureEnabled,
   searchEntraIdPrincipals,
 } = require('~/server/services/GraphApiService');
-const { AclEntry, AccessRole } = require('~/db/models');
 
 /**
  * Generic controller for resource permission endpoints
@@ -177,7 +178,6 @@ const updateResourcePermissions = async (req, res) => {
 
 /**
  * Get principals with their permission roles for a resource (UI-friendly format)
- * Uses efficient aggregation pipeline to join User/Group data in single query
  * @route GET /api/permissions/{resourceType}/{resourceId}
  */
 const getResourcePermissions = async (req, res) => {
@@ -185,110 +185,82 @@ const getResourcePermissions = async (req, res) => {
     const { resourceType, resourceId } = req.params;
     validateResourceType(resourceType);
 
-    // Use aggregation pipeline for efficient single-query data retrieval
-    const results = await AclEntry.aggregate([
-      // Match ACL entries for this resource
-      {
-        $match: {
-          resourceType,
-          resourceId: mongoose.Types.ObjectId.isValid(resourceId)
-            ? mongoose.Types.ObjectId.createFromHexString(resourceId)
-            : resourceId,
-        },
-      },
-      // Lookup AccessRole information
-      {
-        $lookup: {
-          from: 'accessroles',
-          localField: 'roleId',
-          foreignField: '_id',
-          as: 'role',
-        },
-      },
-      // Lookup User information (for user principals)
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'principalId',
-          foreignField: '_id',
-          as: 'userInfo',
-        },
-      },
-      // Lookup Group information (for group principals)
-      {
-        $lookup: {
-          from: 'groups',
-          localField: 'principalId',
-          foreignField: '_id',
-          as: 'groupInfo',
-        },
-      },
-      // Project final structure
-      {
-        $project: {
-          principalType: 1,
-          principalId: 1,
-          accessRoleId: { $arrayElemAt: ['$role.accessRoleId', 0] },
-          userInfo: { $arrayElemAt: ['$userInfo', 0] },
-          groupInfo: { $arrayElemAt: ['$groupInfo', 0] },
-        },
-      },
-    ]);
+    const entries = await findEntriesByResource(resourceType, resourceId);
+
+    const rolesArray = await findRolesByResourceType(resourceType);
+    const rolesById = new Map();
+    for (const role of rolesArray) {
+      const id = role._id?.toString?.() ?? role.id;
+      if (id) {
+        rolesById.set(id, role);
+      }
+    }
 
     let principals = [];
     let publicPermission = null;
 
-    // Process aggregation results
-    for (const result of results) {
-      if (result.principalType === PrincipalType.PUBLIC) {
-        publicPermission = {
-          public: true,
-          publicAccessRoleId: result.accessRoleId,
-        };
-      } else if (result.principalType === PrincipalType.USER && result.userInfo) {
-        principals.push({
-          type: PrincipalType.USER,
-          id: result.userInfo._id.toString(),
-          name: result.userInfo.name || result.userInfo.username,
-          email: result.userInfo.email,
-          avatar: result.userInfo.avatar,
-          source: !result.userInfo._id ? 'entra' : 'local',
-          idOnTheSource: result.userInfo.idOnTheSource || result.userInfo._id.toString(),
-          accessRoleId: result.accessRoleId,
-        });
-      } else if (result.principalType === PrincipalType.GROUP && result.groupInfo) {
-        principals.push({
-          type: PrincipalType.GROUP,
-          id: result.groupInfo._id.toString(),
-          name: result.groupInfo.name,
-          email: result.groupInfo.email,
-          description: result.groupInfo.description,
-          avatar: result.groupInfo.avatar,
-          source: result.groupInfo.source || 'local',
-          idOnTheSource: result.groupInfo.idOnTheSource || result.groupInfo._id.toString(),
-          accessRoleId: result.accessRoleId,
-        });
-      } else if (result.principalType === PrincipalType.ROLE) {
+    for (const entry of entries) {
+      const role = rolesById.get(entry.roleId?.toString?.() ?? entry.roleId);
+      const accessRoleId = role?.accessRoleId;
+
+      if (entry.principalType === PrincipalType.PUBLIC) {
+        publicPermission = { public: true, publicAccessRoleId: accessRoleId };
+        continue;
+      }
+
+      if (entry.principalType === PrincipalType.USER) {
+        const userInfo = await getUserById(entry.principalId);
+        if (userInfo) {
+          principals.push({
+            type: PrincipalType.USER,
+            id: (userInfo._id ?? userInfo.id).toString(),
+            name: userInfo.name || userInfo.username,
+            email: userInfo.email,
+            avatar: userInfo.avatar,
+            source: userInfo.idOnTheSource ? 'entra' : 'local',
+            idOnTheSource: userInfo.idOnTheSource || (userInfo._id ?? userInfo.id).toString(),
+            accessRoleId,
+          });
+        }
+        continue;
+      }
+
+      if (entry.principalType === PrincipalType.GROUP) {
+        const groupInfo = await findGroupById(entry.principalId);
+        if (groupInfo) {
+          principals.push({
+            type: PrincipalType.GROUP,
+            id: (groupInfo._id ?? groupInfo.id).toString(),
+            name: groupInfo.name,
+            email: groupInfo.email,
+            description: groupInfo.description,
+            avatar: groupInfo.avatar,
+            source: groupInfo.source || 'local',
+            idOnTheSource:
+              groupInfo.idOnTheSource || (groupInfo._id ?? groupInfo.id).toString(),
+            accessRoleId,
+          });
+        }
+        continue;
+      }
+
+      if (entry.principalType === PrincipalType.ROLE) {
         principals.push({
           type: PrincipalType.ROLE,
-          /** Role name as ID */
-          id: result.principalId,
-          /** Display the role name */
-          name: result.principalId,
-          description: `System role: ${result.principalId}`,
-          accessRoleId: result.accessRoleId,
+          id: entry.principalId,
+          name: entry.principalId,
+          description: `System role: ${entry.principalId}`,
+          accessRoleId,
         });
       }
     }
 
     if (resourceType === ResourceType.REMOTE_AGENT) {
-      const enricherDeps = { AclEntry, AccessRole, logger };
-      const enrichResult = await enrichRemoteAgentPrincipals(enricherDeps, resourceId, principals);
-      principals = enrichResult.principals;
-      backfillRemoteAgentPermissions(enricherDeps, resourceId, enrichResult.entriesToBackfill);
+      logger.debug(
+        '[getResourcePermissions] Remote agent enrichment not available in BB adapter mode',
+      );
     }
 
-    // Return response in format expected by frontend
     const response = {
       resourceType,
       resourceId,

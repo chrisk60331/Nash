@@ -9,6 +9,8 @@ const {
   mergeAgentOcrConversion,
   MAX_AVATAR_REFRESH_AGENTS,
   convertOcrToContextInPlace,
+  syncAgentToBackboard,
+  deleteAgentMapping,
 } = require('@librechat/api');
 const {
   Time,
@@ -122,6 +124,13 @@ const createAgentHandler = async (req, res) => {
         permissionError,
       );
     }
+
+    syncAgentToBackboard({
+      agentId: agent.id,
+      name: agent.name || 'Unnamed Agent',
+      description: agent.description,
+      instructions: agent.instructions,
+    }).catch((err) => logger.warn('[createAgent] Backboard sync failed:', err));
 
     res.status(201).json(agent);
   } catch (error) {
@@ -461,6 +470,9 @@ const deleteAgentHandler = async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
     await deleteAgent({ id });
+    deleteAgentMapping(id, true).catch((err) =>
+      logger.warn('[deleteAgent] Backboard mapping cleanup failed:', err),
+    );
     return res.json({ message: 'Agent deleted' });
   } catch (error) {
     logger.error('[/Agents/:id] Error deleting Agent', error);

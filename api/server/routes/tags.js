@@ -1,14 +1,14 @@
 const express = require('express');
 const { logger } = require('@librechat/data-schemas');
-const { generateCheckAccess } = require('@librechat/api');
-const { PermissionTypes, Permissions } = require('librechat-data-provider');
 const {
-  updateTagsForConversation,
-  updateConversationTag,
-  createConversationTag,
-  deleteConversationTag,
-  getConversationTags,
-} = require('~/models/ConversationTag');
+  generateCheckAccess,
+  getConversationTagsBB,
+  createConversationTagBB,
+  updateConversationTagBB,
+  deleteConversationTagBB,
+  updateTagsForConversationBB,
+} = require('@librechat/api');
+const { PermissionTypes, Permissions } = require('librechat-data-provider');
 const { requireJwtAuth } = require('~/server/middleware');
 const { getRoleByName } = require('~/models/Role');
 
@@ -31,7 +31,7 @@ router.use(checkBookmarkAccess);
  */
 router.get('/', async (req, res) => {
   try {
-    const tags = await getConversationTags(req.user.id);
+    const tags = await getConversationTagsBB(req.user.id);
     if (tags) {
       res.status(200).json(tags);
     } else {
@@ -51,7 +51,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const tag = await createConversationTag(req.user.id, req.body);
+    const tag = await createConversationTagBB(req.user.id, req.body);
     res.status(200).json(tag);
   } catch (error) {
     logger.error('Error creating conversation tag:', error);
@@ -68,7 +68,7 @@ router.post('/', async (req, res) => {
 router.put('/:tag', async (req, res) => {
   try {
     const decodedTag = decodeURIComponent(req.params.tag);
-    const tag = await updateConversationTag(req.user.id, decodedTag, req.body);
+    const tag = await updateConversationTagBB(req.user.id, decodedTag, req.body);
     if (tag) {
       res.status(200).json(tag);
     } else {
@@ -89,7 +89,7 @@ router.put('/:tag', async (req, res) => {
 router.delete('/:tag', async (req, res) => {
   try {
     const decodedTag = decodeURIComponent(req.params.tag);
-    const tag = await deleteConversationTag(req.user.id, decodedTag);
+    const tag = await deleteConversationTagBB(req.user.id, decodedTag);
     if (tag) {
       res.status(200).json(tag);
     } else {
@@ -109,7 +109,7 @@ router.delete('/:tag', async (req, res) => {
  */
 router.put('/convo/:conversationId', async (req, res) => {
   try {
-    const conversationTags = await updateTagsForConversation(
+    const conversationTags = await updateTagsForConversationBB(
       req.user.id,
       req.params.conversationId,
       req.body.tags,

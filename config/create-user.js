@@ -1,7 +1,6 @@
 const path = require('path');
-const mongoose = require('mongoose');
-const { User } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
+const { findUser } = require('~/models');
 const { registerUser } = require('~/server/services/AuthService');
 const { askQuestion, silentExit } = require('./helpers');
 const connect = require('./connect');
@@ -23,7 +22,6 @@ const connect = require('./connect');
     console.purple('--------------------------');
   }
 
-  // Parse command line arguments
   let email, password, name, username, emailVerified, provider;
   for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i].startsWith('--email-verified=')) {
@@ -77,7 +75,6 @@ const connect = require('./connect');
     }
   }
 
-  // Only prompt for emailVerified if it wasn't set via CLI
   if (emailVerified === undefined) {
     const emailVerifiedInput = await askQuestion(`Email verified? (Y/n, default is Y):
 
@@ -88,18 +85,18 @@ If \`n\`, and email service is configured, the user will be sent a verification 
 If \`n\`, and email service is not configured, you must have the \`ALLOW_UNVERIFIED_EMAIL_LOGIN\` .env variable set to true,
 or the user will need to attempt logging in to have a verification link sent to them.`);
 
-    const normalizedEmailVerifiedInput = emailVerifiedInput.trim().toLowerCase()
+    const normalizedEmailVerifiedInput = emailVerifiedInput.trim().toLowerCase();
 
-    emailVerified = true
+    emailVerified = true;
 
     if (normalizedEmailVerifiedInput === 'n') {
       emailVerified = false;
     }
   }
 
-  const userExists = await User.findOne({ $or: [{ email }, { username }] });
+  const userExists = await findUser({ email });
   if (userExists) {
-    console.red('Error: A user with that email or username already exists!');
+    console.red('Error: A user with that email already exists!');
     silentExit(1);
   }
 
@@ -117,7 +114,7 @@ or the user will need to attempt logging in to have a verification link sent to 
     silentExit(1);
   }
 
-  const userCreated = await User.findOne({ $or: [{ email }, { username }] });
+  const userCreated = await findUser({ email });
   if (userCreated) {
     console.green('User created successfully!');
     console.green(`Email verified: ${userCreated.emailVerified}`);

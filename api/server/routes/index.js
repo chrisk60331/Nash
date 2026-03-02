@@ -25,6 +25,7 @@ const tags = require('./tags');
 const auth = require('./auth');
 const keys = require('./keys');
 const user = require('./user');
+const backboard = require('./backboard');
 const mcp = require('./mcp');
 
 module.exports = {
@@ -55,5 +56,6 @@ module.exports = {
   assistants,
   categories,
   staticRoute,
+  backboard,
   accessPermissions,
 };

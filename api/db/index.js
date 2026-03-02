@@ -1,8 +1,5 @@
-const mongoose = require('mongoose');
-const { createModels } = require('@librechat/data-schemas');
-const { connectDb } = require('./connect');
-const indexSync = require('./indexSync');
-
-createModels(mongoose);
+/** @deprecated MongoDB removed — all storage uses Backboard */
+const connectDb = async () => {};
+const indexSync = async () => {};
 
 module.exports = { connectDb, indexSync };

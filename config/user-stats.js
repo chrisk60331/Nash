@@ -1,43 +1,25 @@
 const path = require('path');
-const mongoose = require('mongoose');
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const { silentExit } = require('./helpers');
-const { User, Conversation, Message } = require('@librechat/data-schemas').createModels(mongoose);
+const { searchUsers } = require('~/models');
 const connect = require('./connect');
 
 (async () => {
   await connect();
 
-  /**
-   * Show the welcome / help menu
-   */
   console.purple('-----------------------------');
   console.purple('Show the stats of all users');
   console.purple('-----------------------------');
 
-  let users = await User.find({});
-  let userData = [];
-  for (const user of users) {
-    let conversationsCount = (await Conversation.countDocuments({ user: user._id })) ?? 0;
-    let messagesCount = (await Message.countDocuments({ user: user._id })) ?? 0;
-
-    userData.push({
-      User: user.name,
-      Email: user.email,
-      Conversations: conversationsCount,
-      Messages: messagesCount,
-    });
-  }
-
-  userData.sort((a, b) => {
-    if (a.Conversations !== b.Conversations) {
-      return b.Conversations - a.Conversations;
-    }
-
-    return b.Messages - a.Messages;
-  });
+  const users = await searchUsers('');
+  const userData = users.map((user) => ({
+    User: user.name,
+    Email: user.email,
+    Created: user.createdAt,
+  }));
 
   console.table(userData);
+  console.yellow('Note: Per-user conversation/message counts are not available via Backboard.');
 
   silentExit(0);
 })();

@@ -1,9 +1,8 @@
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const readline = require('readline');
-const mongoose = require('mongoose');
-const { User } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
+const { findUser, updateUser } = require('~/models');
 const connect = require('./connect');
 
 const rl = readline.createInterface({
@@ -18,7 +17,7 @@ const resetPassword = async () => {
     await connect();
 
     const email = await question('Enter user email: ');
-    const user = await User.findOne({ email });
+    const user = await findUser({ email });
 
     if (!user) {
       console.error('User not found!');
@@ -47,13 +46,10 @@ const resetPassword = async () => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    await User.updateOne(
-      { email },
-      {
-        password: hashedPassword,
-        passwordVersion: Date.now(), // Invalidate old sessions
-      },
-    );
+    await updateUser(user._id, {
+      password: hashedPassword,
+      passwordVersion: Date.now(),
+    });
 
     console.log('Password successfully reset!');
     process.exit(0);

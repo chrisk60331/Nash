@@ -1,50 +1,13 @@
 const path = require('path');
-const mongoose = require('mongoose');
-const { Banner } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
-const { askQuestion, silentExit } = require('./helpers');
-const connect = require('./connect');
+const { silentExit } = require('./helpers');
 
 (async () => {
-  await connect();
-
   console.purple('--------------------------');
   console.purple('Delete the banner!');
   console.purple('--------------------------');
-
-  const now = new Date();
-
-  try {
-    const banner = await Banner.findOne({
-      displayFrom: { $lte: now },
-      $or: [{ displayTo: { $gte: now } }, { displayTo: null }],
-    });
-
-    if (!banner) {
-      console.yellow('No banner found to delete.');
-      silentExit(0);
-    }
-
-    console.purple('Current banner:');
-    console.log(`Message: ${banner.message}`);
-    console.log(`Display From: ${banner.displayFrom}`);
-    console.log(`Display To: ${banner.displayTo || 'Not specified'}`);
-    console.log(`Is Public: ${banner.isPublic}`);
-
-    const confirmDelete = await askQuestion('Do you want to delete this banner? (y/N): ');
-
-    if (confirmDelete.toLowerCase() === 'y') {
-      await Banner.findByIdAndDelete(banner._id);
-      console.green('Banner deleted successfully!');
-    } else {
-      console.yellow('Banner deletion cancelled.');
-    }
-  } catch (error) {
-    console.red('Error: ' + error.message);
-    console.error(error);
-    silentExit(1);
-  }
-
+  console.yellow('Banner management is handled by Backboard. This script is no longer needed.');
+  console.yellow('Use the Backboard admin interface to manage banners.');
   silentExit(0);
 })();
 

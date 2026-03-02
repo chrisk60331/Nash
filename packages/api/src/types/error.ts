@@ -1,5 +1,3 @@
-import type { Error as MongooseError } from 'mongoose';
-
 /** MongoDB duplicate key error interface */
 export interface MongoServerError extends Error {
   code: number;
@@ -7,8 +5,8 @@ export interface MongoServerError extends Error {
   errmsg?: string;
 }
 
-/** Mongoose validation error interface */
-export interface ValidationError extends MongooseError {
+/** Validation error interface */
+export interface ValidationError extends Error {
   name: 'ValidationError';
   errors: Record<
     string,

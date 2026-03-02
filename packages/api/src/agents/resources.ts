@@ -2,33 +2,15 @@ import { logger } from '@librechat/data-schemas';
 import { EModelEndpoint, EToolResources, AgentCapabilities } from 'librechat-data-provider';
 import type { AgentToolResources, TFile, AgentBaseResource } from 'librechat-data-provider';
 import type { IMongoFile, AppConfig, IUser } from '@librechat/data-schemas';
-import type { FilterQuery, QueryOptions, ProjectionType } from 'mongoose';
 import type { Request as ServerRequest } from 'express';
 
-/**
- * Function type for retrieving files from the database
- * @param filter - MongoDB filter query for files
- * @param _sortOptions - Sorting options (currently unused)
- * @param selectFields - Field selection options
- * @param options - Additional options including userId and agentId for access control
- * @returns Promise resolving to array of files
- */
 export type TGetFiles = (
-  filter: FilterQuery<IMongoFile>,
-  _sortOptions: ProjectionType<IMongoFile> | null | undefined,
-  selectFields: QueryOptions<IMongoFile> | null | undefined,
+  filter: Record<string, unknown>,
+  _sortOptions: Record<string, unknown> | null | undefined,
+  selectFields: Record<string, unknown> | null | undefined,
   options?: { userId?: string; agentId?: string },
 ) => Promise<Array<TFile>>;
 
-/**
- * Helper function to add a file to a specific tool resource category
- * Prevents duplicate files within the same resource category
- * @param params - Parameters object
- * @param params.file - The file to add to the resource
- * @param params.resourceType - The type of tool resource (e.g., execute_code, file_search, image_edit)
- * @param params.tool_resources - The agent's tool resources object to update
- * @param params.processedResourceFiles - Set tracking processed files per resource type
- */
 const addFileToResource = ({
   file,
   resourceType,
@@ -57,7 +39,6 @@ const addFileToResource = ({
     };
   }
 
-  // Check if already exists in the files array
   const resourceFiles = tool_resources[resourceType as keyof AgentToolResources]?.files;
   const alreadyExists = resourceFiles?.some((f: TFile) => f.file_id === file.file_id);
 
@@ -67,18 +48,6 @@ const addFileToResource = ({
   }
 };
 
-/**
- * Categorizes a file into the appropriate tool resource based on its properties
- * Files are categorized as:
- * - execute_code: Files with fileIdentifier metadata
- * - file_search: Files marked as embedded
- * - image_edit: Image files in the request file set with dimensions
- * @param params - Parameters object
- * @param params.file - The file to categorize
- * @param params.tool_resources - The agent's tool resources to update
- * @param params.requestFileSet - Set of file IDs from the current request
- * @param params.processedResourceFiles - Set tracking processed files per resource type
- */
 const categorizeFileForToolResources = ({
   file,
   tool_resources,
@@ -125,23 +94,6 @@ const categorizeFileForToolResources = ({
   }
 };
 
-/**
- * Primes resources for agent execution by processing attachments and tool resources
- * This function:
- * 1. Fetches OCR files if OCR is enabled
- * 2. Processes attachment files
- * 3. Categorizes files into appropriate tool resources
- * 4. Prevents duplicate files across all sources
- *
- * @param params - Parameters object
- * @param params.req - Express request object
- * @param params.appConfig - Application configuration object
- * @param params.getFiles - Function to retrieve files from database
- * @param params.requestFileSet - Set of file IDs from the current request
- * @param params.attachments - Promise resolving to array of attachment files
- * @param params.tool_resources - Existing tool resources for the agent
- * @returns Promise resolving to processed attachments and updated tool resources
- */
 export const primeResources = async ({
   req,
   appConfig,
@@ -163,50 +115,27 @@ export const primeResources = async ({
   tool_resources: AgentToolResources | undefined;
 }> => {
   try {
-    /**
-     * Array to collect all unique files that will be returned as attachments
-     * Files are added from OCR results and attachment promises, with duplicates prevented
-     */
     const attachments: Array<TFile> = [];
-    /**
-     * Set of file IDs already added to the attachments array
-     * Used to prevent duplicate files from being added multiple times
-     * Pre-populated with files from non-OCR tool_resources to prevent re-adding them
-     */
     const attachmentFileIds = new Set<string>();
-    /**
-     * Set tracking which files have been added to specific tool resource categories
-     * Format: "resourceType:fileId" (e.g., "execute_code:file123")
-     * Prevents the same file from being added multiple times to the same resource
-     */
     const processedResourceFiles = new Set<string>();
-    /**
-     * The agent's tool resources object that will be updated with categorized files
-     * Create a shallow copy first to avoid mutating the original
-     */
     const tool_resources: AgentToolResources = { ...(_tool_resources ?? {}) };
 
-    // Deep copy each resource to avoid mutating nested objects/arrays
     for (const [resourceType, resource] of Object.entries(tool_resources)) {
       if (!resource) {
         continue;
       }
 
-      // Deep copy the resource to avoid mutations
       tool_resources[resourceType as keyof AgentToolResources] = {
         ...resource,
-        // Deep copy arrays to prevent mutations
         ...(resource.files && { files: [...resource.files] }),
         ...(resource.file_ids && { file_ids: [...resource.file_ids] }),
         ...(resource.vector_store_ids && { vector_store_ids: [...resource.vector_store_ids] }),
       } as AgentBaseResource;
 
-      // Now track existing files
       if (resource.files && Array.isArray(resource.files)) {
         for (const file of resource.files) {
           if (file?.file_id) {
             processedResourceFiles.add(`${resourceType}:${file.file_id}`);
-            // Files from non-context resources should not be added to attachments from _attachments
             if (resourceType !== EToolResources.context && resourceType !== EToolResources.ocr) {
               attachmentFileIds.add(file.file_id);
             }
@@ -242,14 +171,11 @@ export const primeResources = async ({
           continue;
         }
 
-        // Clear from attachmentFileIds if it was pre-added
         attachmentFileIds.delete(file.file_id);
 
-        // Add to attachments
         attachments.push(file);
         attachmentFileIds.add(file.file_id);
 
-        // Categorize for tool resources
         categorizeFileForToolResources({
           file,
           tool_resources,
@@ -291,14 +217,12 @@ export const primeResources = async ({
   } catch (error) {
     logger.error('Error priming resources', error);
 
-    // Safely try to get attachments without rethrowing
     let safeAttachments: Array<TFile | undefined> = [];
     if (_attachments) {
       try {
         const attachmentFiles = await _attachments;
         safeAttachments = (attachmentFiles?.filter((file) => !!file) ?? []) as Array<TFile>;
       } catch (attachmentError) {
-        // If attachments promise is also rejected, just use empty array
         logger.error('Error resolving attachments in catch block', attachmentError);
         safeAttachments = [];
       }

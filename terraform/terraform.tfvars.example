@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars and fill in values
+# NEVER commit terraform.tfvars to git
+
+environment = "dev"
+
+# Secrets
+backboard_api_key      = ""
+backboard_assistant_id = ""
+creds_key              = ""
+creds_iv               = ""
+jwt_secret             = ""
+jwt_refresh_secret     = ""
+
+# Set after first deploy (use the App Runner URL)
+# domain_client = "https://<id>.us-west-2.awsapprunner.com"
+# domain_server = "https://<id>.us-west-2.awsapprunner.com"

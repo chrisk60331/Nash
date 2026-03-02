@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Import } from 'lucide-react';
 import { matchSorter } from 'match-sorter';
 import { SystemRoles, PermissionTypes, Permissions } from 'librechat-data-provider';
 import {
@@ -18,6 +18,7 @@ import {
   useGetUserQuery,
 } from '~/data-provider';
 import { useLocalize, useAuthContext, useHasAccess } from '~/hooks';
+import MemoryImportDialog from './MemoryImportDialog';
 import MemoryCreateDialog from './MemoryCreateDialog';
 import MemoryUsageBadge from './MemoryUsageBadge';
 import AdminSettings from './AdminSettings';
@@ -34,6 +35,7 @@ export default function MemoryPanel() {
   const [pageIndex, setPageIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [referenceSavedMemories, setReferenceSavedMemories] = useState(true);
 
   const updateMemoryPreferencesMutation = useUpdateMemoryPreferencesMutation({
@@ -133,25 +135,46 @@ export default function MemoryPanel() {
             containerClassName="flex-1"
           />
           {hasCreateAccess && (
-            <MemoryCreateDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-              <OGDialogTrigger asChild>
-                <TooltipAnchor
-                  description={localize('com_ui_create_memory')}
-                  side="bottom"
-                  render={
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="shrink-0 bg-transparent"
-                      aria-label={localize('com_ui_create_memory')}
-                      onClick={() => setCreateDialogOpen(true)}
-                    >
-                      <Plus className="size-4" aria-hidden="true" />
-                    </Button>
-                  }
-                />
-              </OGDialogTrigger>
-            </MemoryCreateDialog>
+            <>
+              <MemoryImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+                <OGDialogTrigger asChild>
+                  <TooltipAnchor
+                    description={localize('com_ui_memory_import_title')}
+                    side="bottom"
+                    render={
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0 bg-transparent"
+                        aria-label={localize('com_ui_memory_import_title')}
+                        onClick={() => setImportDialogOpen(true)}
+                      >
+                        <Import className="size-4" aria-hidden="true" />
+                      </Button>
+                    }
+                  />
+                </OGDialogTrigger>
+              </MemoryImportDialog>
+              <MemoryCreateDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                <OGDialogTrigger asChild>
+                  <TooltipAnchor
+                    description={localize('com_ui_create_memory')}
+                    side="bottom"
+                    render={
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0 bg-transparent"
+                        aria-label={localize('com_ui_create_memory')}
+                        onClick={() => setCreateDialogOpen(true)}
+                      >
+                        <Plus className="size-4" aria-hidden="true" />
+                      </Button>
+                    }
+                  />
+                </OGDialogTrigger>
+              </MemoryCreateDialog>
+            </>
           )}
         </div>
 

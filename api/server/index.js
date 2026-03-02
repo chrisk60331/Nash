@@ -21,12 +21,12 @@ const {
   createStreamServices,
   initializeFileStorage,
 } = require('@librechat/api');
-const { connectDb, indexSync } = require('~/db');
+// MongoDB removed — using Backboard for all storage
 const initializeOAuthReconnectManager = require('./services/initializeOAuthReconnectManager');
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
 const { updateInterfacePermissions } = require('~/models/interface');
-const { checkMigrations } = require('./services/start/migration');
+// Migrations no longer needed (Backboard storage)
 const initializeMCPs = require('./services/initializeMCPs');
 const configureSocialLogins = require('./socialLogins');
 const { getAppConfig } = require('./services/Config');
@@ -48,12 +48,7 @@ const startServer = async () => {
   if (typeof Bun !== 'undefined') {
     axios.defaults.headers.common['Accept-Encoding'] = 'gzip';
   }
-  await connectDb();
-
-  logger.info('Connected to MongoDB');
-  indexSync().catch((err) => {
-    logger.error('[indexSync] Background sync failed:', err);
-  });
+  logger.info('Using Backboard for all storage (MongoDB disabled)');
 
   app.disable('x-powered-by');
   app.set('trust proxy', trusted_proxy);
@@ -163,6 +158,7 @@ const startServer = async () => {
 
   app.use('/api/tags', routes.tags);
   app.use('/api/mcp', routes.mcp);
+  app.use('/api/backboard/v1', routes.backboard);
 
   /** 404 for unmatched API routes */
   app.use('/api', apiNotFound);
@@ -202,7 +198,7 @@ const startServer = async () => {
 
     await initializeMCPs();
     await initializeOAuthReconnectManager();
-    await checkMigrations();
+    // checkMigrations removed (no MongoDB)
 
     // Configure stream services (auto-detects Redis from USE_REDIS env var)
     const streamServices = createStreamServices();

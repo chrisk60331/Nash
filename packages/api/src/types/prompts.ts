@@ -1,5 +1,4 @@
 import type { IPromptGroup as IPromptGroup } from '@librechat/data-schemas';
-import type { Types } from 'mongoose';
 
 export interface PromptGroupsListResponse {
   promptGroups: IPromptGroup[];
@@ -17,8 +16,8 @@ export interface PromptGroupsAllResponse {
 export interface AccessiblePromptGroupsResult {
   object: 'list';
   data: IPromptGroup[];
-  first_id: Types.ObjectId | null;
-  last_id: Types.ObjectId | null;
+  first_id: string | null;
+  last_id: string | null;
   has_more: boolean;
   after: string | null;
 }

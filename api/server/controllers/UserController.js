@@ -9,30 +9,20 @@ const {
 const {
   deleteAllUserSessions,
   deleteAllSharedLinks,
+  deleteAllAgentApiKeys,
   updateUserPlugins,
   deleteUserById,
   deleteMessages,
   deletePresets,
   deleteUserKey,
+  deleteTokens,
+  getUserById,
   deleteConvos,
   deleteFiles,
   updateUser,
   findToken,
   getFiles,
 } = require('~/models');
-const {
-  ConversationTag,
-  AgentApiKey,
-  Transaction,
-  MemoryEntry,
-  Assistant,
-  AclEntry,
-  Balance,
-  Action,
-  Group,
-  Token,
-  User,
-} = require('~/db/models');
 const { updateUserPluginAuth, deleteUserPluginAuth } = require('~/server/services/PluginService');
 const { verifyEmail, resendVerificationEmail } = require('~/server/services/AuthService');
 const { getMCPManager, getFlowStateManager, getMCPServersRegistry } = require('~/config');
@@ -75,7 +65,7 @@ const getUserController = async (req, res) => {
 
 const getTermsStatusController = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await getUserById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -88,7 +78,7 @@ const getTermsStatusController = async (req, res) => {
 
 const acceptTermsController = async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(req.user.id, { termsAccepted: true }, { new: true });
+    const user = await updateUser(req.user.id, { termsAccepted: true });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -241,37 +231,25 @@ const deleteUserController = async (req, res) => {
   const { user } = req;
 
   try {
-    await deleteMessages({ user: user.id }); // delete user messages
-    await deleteAllUserSessions({ userId: user.id }); // delete user sessions
-    await Transaction.deleteMany({ user: user.id }); // delete user transactions
-    await deleteUserKey({ userId: user.id, all: true }); // delete user keys
-    await Balance.deleteMany({ user: user._id }); // delete user balances
-    await deletePresets(user.id); // delete user presets
+    await deleteMessages({ user: user.id });
+    await deleteAllUserSessions({ userId: user.id });
+    await deleteUserKey({ userId: user.id, all: true });
+    await deletePresets(user.id);
     try {
-      await deleteConvos(user.id); // delete user convos
+      await deleteConvos(user.id);
     } catch (error) {
       logger.error('[deleteUserController] Error deleting user convos, likely no convos', error);
     }
-    await deleteUserPluginAuth(user.id, null, true); // delete user plugin auth
-    await deleteUserById(user.id); // delete user
-    await deleteAllSharedLinks(user.id); // delete user shared links
-    await deleteUserFiles(req); // delete user files
-    await deleteFiles(null, user.id); // delete database files in case of orphaned files from previous steps
-    await deleteToolCalls(user.id); // delete user tool calls
-    await deleteUserAgents(user.id); // delete user agents
-    await AgentApiKey.deleteMany({ user: user._id }); // delete user agent API keys
-    await Assistant.deleteMany({ user: user.id }); // delete user assistants
-    await ConversationTag.deleteMany({ user: user.id }); // delete user conversation tags
-    await MemoryEntry.deleteMany({ userId: user.id }); // delete user memory entries
-    await deleteUserPrompts(req, user.id); // delete user prompts
-    await Action.deleteMany({ user: user.id }); // delete user actions
-    await Token.deleteMany({ userId: user.id }); // delete user OAuth tokens
-    await Group.updateMany(
-      // remove user from all groups
-      { memberIds: user.id },
-      { $pull: { memberIds: user.id } },
-    );
-    await AclEntry.deleteMany({ principalId: user._id }); // delete user ACL entries
+    await deleteUserPluginAuth(user.id, null, true);
+    await deleteUserById(user.id);
+    await deleteAllSharedLinks(user.id);
+    await deleteUserFiles(req);
+    await deleteFiles(null, user.id);
+    await deleteToolCalls(user.id);
+    await deleteUserAgents(user.id);
+    await deleteAllAgentApiKeys(user.id);
+    await deleteUserPrompts(req, user.id);
+    await deleteTokens({ userId: user.id });
     logger.info(`User deleted account. Email: ${user.email} ID: ${user.id}`);
     res.status(200).send({ message: 'User deleted' });
   } catch (err) {
@@ -398,7 +376,7 @@ const maybeUninstallOAuthMCP = async (userId, pluginKey, appConfig) => {
     userId,
     serverName,
     deleteToken: async (filter) => {
-      await Token.deleteOne(filter);
+      await deleteTokens(filter);
     },
   });
 

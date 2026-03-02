@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const { nanoid } = require('nanoid');
 const { logger, hashToken, getRandomValues } = require('@librechat/data-schemas');
 const { createToken, findToken } = require('~/models');
 
@@ -20,7 +20,7 @@ const createInvite = async (email) => {
     const hash = await hashToken(token);
     const encodedToken = encodeURIComponent(token);
 
-    const fakeUserId = new mongoose.Types.ObjectId();
+    const fakeUserId = nanoid();
 
     await createToken({
       userId: fakeUserId,

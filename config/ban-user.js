@@ -1,8 +1,7 @@
 const path = require('path');
-const mongoose = require('mongoose');
-const { User } = require('@librechat/data-schemas').createModels(mongoose);
 const { ViolationTypes } = require('librechat-data-provider');
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
+const { findUser } = require('~/models');
 const { askQuestion, silentExit } = require('./helpers');
 const banViolation = require('~/cache/banViolation');
 const connect = require('./connect');
@@ -18,9 +17,8 @@ const connect = require('./connect');
   let duration = '';
 
   if (process.argv.length >= 4) {
-    // Check if there are enough command-line arguments.
     email = process.argv[2];
-    duration = parseInt(process.argv[3]); // Parse the duration as an integer.
+    duration = parseInt(process.argv[3]);
   } else {
     console.orange('Usage: npm run ban-user <email> <duration>');
     console.orange('Note: if you do not pass in the arguments, you will be prompted for them.');
@@ -46,7 +44,7 @@ const connect = require('./connect');
     silentExit(1);
   }
 
-  const user = await User.findOne({ email }).lean();
+  const user = await findUser({ email });
   if (!user) {
     console.red('Error: No user with that email was found!');
     silentExit(1);

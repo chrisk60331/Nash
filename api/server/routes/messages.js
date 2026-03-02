@@ -14,7 +14,6 @@ const {
 const { findAllArtifacts, replaceArtifactContent } = require('~/server/services/Artifacts/update');
 const { requireJwtAuth, validateMessageReq } = require('~/server/middleware');
 const { getConvosQueried } = require('~/models/Conversation');
-const { Message } = require('~/db/models');
 
 const router = express.Router();
 router.use(requireJwtAuth);
@@ -40,72 +39,34 @@ router.get('/', async (req, res) => {
     const sortOrder = sortDirection === 'asc' ? 1 : -1;
 
     if (conversationId && messageId) {
-      const message = await Message.findOne({
-        conversationId,
-        messageId,
-        user: user,
-      }).lean();
-      response = { messages: message ? [message] : [], nextCursor: null };
+      const message = await getMessage({ user, messageId });
+      response = {
+        messages: message && message.conversationId === conversationId ? [message] : [],
+        nextCursor: null,
+      };
     } else if (conversationId) {
-      const filter = { conversationId, user: user };
-      if (cursor) {
-        filter[sortField] = sortOrder === 1 ? { $gt: cursor } : { $lt: cursor };
+      let messages = await getMessages({ conversationId, user });
+      if (sortField !== 'createdAt') {
+        messages.sort((a, b) => {
+          const aV = a[sortField] || '';
+          const bV = b[sortField] || '';
+          return sortOrder * (aV > bV ? 1 : aV < bV ? -1 : 0);
+        });
       }
-      const messages = await Message.find(filter)
-        .sort({ [sortField]: sortOrder })
-        .limit(pageSize + 1)
-        .lean();
+      if (cursor) {
+        messages = messages.filter((m) => {
+          const v = m[sortField];
+          return sortOrder === 1 ? v > cursor : v < cursor;
+        });
+      }
       let nextCursor = null;
       if (messages.length > pageSize) {
-        messages.pop(); // Remove extra item used to detect next page
-        // Create cursor from the last RETURNED item (not the popped one)
+        messages = messages.slice(0, pageSize);
         nextCursor = messages[messages.length - 1][sortField];
       }
       response = { messages, nextCursor };
     } else if (search) {
-      const searchResults = await Message.meiliSearch(search, { filter: `user = "${user}"` }, true);
-
-      const messages = searchResults.hits || [];
-
-      const result = await getConvosQueried(req.user.id, messages, cursor);
-
-      const messageIds = [];
-      const cleanedMessages = [];
-      for (let i = 0; i < messages.length; i++) {
-        let message = messages[i];
-        if (result.convoMap[message.conversationId]) {
-          messageIds.push(message.messageId);
-          cleanedMessages.push(message);
-        }
-      }
-
-      const dbMessages = await getMessages({
-        user,
-        messageId: { $in: messageIds },
-      });
-
-      const dbMessageMap = {};
-      for (const dbMessage of dbMessages) {
-        dbMessageMap[dbMessage.messageId] = dbMessage;
-      }
-
-      const activeMessages = [];
-      for (const message of cleanedMessages) {
-        const convo = result.convoMap[message.conversationId];
-        const dbMessage = dbMessageMap[message.messageId];
-
-        activeMessages.push({
-          ...message,
-          title: convo.title,
-          conversationId: message.conversationId,
-          model: convo.model,
-          isCreatedByUser: dbMessage?.isCreatedByUser,
-          endpoint: dbMessage?.endpoint,
-          iconURL: dbMessage?.iconURL,
-        });
-      }
-
-      response = { messages: activeMessages, nextCursor: null };
+      response = { messages: [], nextCursor: null };
     } else {
       response = { messages: [], nextCursor: null };
     }
@@ -283,7 +244,7 @@ router.post('/artifact/:messageId', async (req, res) => {
 router.get('/:conversationId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const messages = await getMessages({ conversationId }, '-_id -__v -user');
+    const messages = await getMessages({ conversationId, user: req.user.id }, '-_id -__v -user');
     res.status(200).json(messages);
   } catch (error) {
     logger.error('Error fetching messages:', error);
@@ -339,7 +300,7 @@ router.put('/:conversationId/:messageId', validateMessageReq, async (req, res) =
       return res.status(400).json({ error: 'Invalid index' });
     }
 
-    const message = (await getMessages({ conversationId, messageId }, 'content tokenCount'))?.[0];
+    const message = (await getMessages({ conversationId, messageId, user: req.user.id }, 'content tokenCount'))?.[0];
     if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }

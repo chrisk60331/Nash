@@ -1,30 +1,13 @@
 const path = require('path');
-const mongoose = require('mongoose');
-const { User, Balance } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const { silentExit } = require('./helpers');
-const connect = require('./connect');
 
 (async () => {
-  await connect();
-
-  /**
-   * Show the welcome / help menu
-   */
   console.purple('-----------------------------');
   console.purple('Show the balance of all users');
   console.purple('-----------------------------');
-
-  let users = await User.find({});
-  for (const user of users) {
-    let balance = await Balance.findOne({ user: user._id });
-    if (balance !== null) {
-      console.green(`User ${user.name} (${user.email}) has a balance of ${balance.tokenCredits}`);
-    } else {
-      console.yellow(`User ${user.name} (${user.email}) has no balance`);
-    }
-  }
-
+  console.yellow('Balance management is handled by Backboard. This script is no longer needed.');
+  console.yellow('Use the Backboard admin interface to view user balances.');
   silentExit(0);
 })();
 

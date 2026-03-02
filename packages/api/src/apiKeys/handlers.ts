@@ -1,10 +1,9 @@
-import type { Request, Response } from 'express';
-import type { Types } from 'mongoose';
 import { logger } from '@librechat/data-schemas';
+import type { Request, Response } from 'express';
 
 export interface ApiKeyHandlerDependencies {
   createAgentApiKey: (params: {
-    userId: string | Types.ObjectId;
+    userId: string;
     name: string;
     expiresAt?: Date | null;
   }) => Promise<{
@@ -15,7 +14,7 @@ export interface ApiKeyHandlerDependencies {
     createdAt: Date;
     expiresAt?: Date;
   }>;
-  listAgentApiKeys: (userId: string | Types.ObjectId) => Promise<
+  listAgentApiKeys: (userId: string) => Promise<
     Array<{
       id: string;
       name: string;
@@ -26,12 +25,12 @@ export interface ApiKeyHandlerDependencies {
     }>
   >;
   deleteAgentApiKey: (
-    keyId: string | Types.ObjectId,
-    userId: string | Types.ObjectId,
+    keyId: string,
+    userId: string,
   ) => Promise<boolean>;
   getAgentApiKeyById: (
-    keyId: string | Types.ObjectId,
-    userId: string | Types.ObjectId,
+    keyId: string,
+    userId: string,
   ) => Promise<{
     id: string;
     name: string;
@@ -45,7 +44,7 @@ export interface ApiKeyHandlerDependencies {
 interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
-    _id: Types.ObjectId;
+    _id: string;
   };
 }
 

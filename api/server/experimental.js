@@ -20,12 +20,12 @@ const {
   handleJsonParseError,
   initializeFileStorage,
 } = require('@librechat/api');
-const { connectDb, indexSync } = require('~/db');
+// MongoDB removed — using Backboard for all storage
 const initializeOAuthReconnectManager = require('./services/initializeOAuthReconnectManager');
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
 const { updateInterfacePermissions } = require('~/models/interface');
-const { checkMigrations } = require('./services/start/migration');
+// Migrations no longer needed (Backboard storage)
 const initializeMCPs = require('./services/initializeMCPs');
 const configureSocialLogins = require('./socialLogins');
 const { getAppConfig } = require('./services/Config');
@@ -203,14 +203,7 @@ if (cluster.isMaster) {
       axios.defaults.headers.common['Accept-Encoding'] = 'gzip';
     }
 
-    /** Connect to MongoDB */
-    await connectDb();
-    logger.info(`Worker ${process.pid}: Connected to MongoDB`);
-
-    /** Background index sync (non-blocking) */
-    indexSync().catch((err) => {
-      logger.error(`[Worker ${process.pid}][indexSync] Background sync failed:`, err);
-    });
+    logger.info(`Worker ${process.pid}: Using Backboard for all storage (MongoDB disabled)`);
 
     app.disable('x-powered-by');
     app.set('trust proxy', trusted_proxy);
@@ -363,7 +356,7 @@ if (cluster.isMaster) {
       /** Initialize MCP servers and OAuth reconnection for this worker */
       await initializeMCPs();
       await initializeOAuthReconnectManager();
-      await checkMigrations();
+      // checkMigrations removed (no MongoDB)
     });
 
     /** Handle inter-process messages from master */

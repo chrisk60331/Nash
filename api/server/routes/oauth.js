@@ -8,7 +8,7 @@ const { createSetBalanceConfig } = require('@librechat/api');
 const { checkDomainAllowed, loginLimiter, logHeaders } = require('~/server/middleware');
 const { createOAuthHandler } = require('~/server/controllers/auth/oauth');
 const { getAppConfig } = require('~/server/services/Config');
-const { Balance } = require('~/db/models');
+const { Balance } = require('~/models');
 
 const setBalanceConfig = createSetBalanceConfig({
   getAppConfig,

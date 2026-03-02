@@ -33,6 +33,8 @@ export * from './agents';
 export * from './prompts';
 /* Endpoints */
 export * from './endpoints';
+/* Backboard */
+export * from './backboard';
 /* Files */
 export * from './files';
 /* Tools */

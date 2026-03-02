@@ -1,13 +1,14 @@
 const express = require('express');
-const { Tokenizer, generateCheckAccess } = require('@librechat/api');
-const { PermissionTypes, Permissions } = require('librechat-data-provider');
 const {
-  getAllUserMemories,
-  toggleUserMemories,
-  createMemory,
-  deleteMemory,
-  setMemory,
-} = require('~/models');
+  Tokenizer,
+  generateCheckAccess,
+  getAllUserMemoriesBB,
+  createMemoryBB,
+  deleteMemoryBB,
+  setMemoryBB,
+} = require('@librechat/api');
+const { PermissionTypes, Permissions } = require('librechat-data-provider');
+const { toggleUserMemories } = require('~/models');
 const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
 const { getRoleByName } = require('~/models/Role');
 
@@ -50,7 +51,7 @@ router.use(requireJwtAuth);
  */
 router.get('/', checkMemoryRead, configMiddleware, async (req, res) => {
   try {
-    const memories = await getAllUserMemories(req.user.id);
+    const memories = await getAllUserMemoriesBB(req.user.id);
 
     const sortedMemories = memories.sort(
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
@@ -118,7 +119,7 @@ router.post('/', memoryPayloadLimit, checkMemoryCreate, configMiddleware, async 
   try {
     const tokenCount = Tokenizer.getTokenCount(value, 'o200k_base');
 
-    const memories = await getAllUserMemories(req.user.id);
+    const memories = await getAllUserMemoriesBB(req.user.id);
 
     const appConfig = req.config;
     const memoryConfig = appConfig?.memory;
@@ -136,7 +137,7 @@ router.post('/', memoryPayloadLimit, checkMemoryCreate, configMiddleware, async 
       }
     }
 
-    const result = await createMemory({
+    const result = await createMemoryBB({
       userId: req.user.id,
       key: key.trim(),
       value: value.trim(),
@@ -147,7 +148,7 @@ router.post('/', memoryPayloadLimit, checkMemoryCreate, configMiddleware, async 
       return res.status(500).json({ error: 'Failed to create memory.' });
     }
 
-    const updatedMemories = await getAllUserMemories(req.user.id);
+    const updatedMemories = await getAllUserMemoriesBB(req.user.id);
     const newMemory = updatedMemories.find((m) => m.key === key.trim());
 
     res.status(201).json({ created: true, memory: newMemory });
@@ -224,7 +225,7 @@ router.patch('/:key', memoryPayloadLimit, checkMemoryUpdate, configMiddleware, a
   try {
     const tokenCount = Tokenizer.getTokenCount(value, 'o200k_base');
 
-    const memories = await getAllUserMemories(req.user.id);
+    const memories = await getAllUserMemoriesBB(req.user.id);
     const existingMemory = memories.find((m) => m.key === urlKey);
 
     if (!existingMemory) {
@@ -237,7 +238,7 @@ router.patch('/:key', memoryPayloadLimit, checkMemoryUpdate, configMiddleware, a
         return res.status(409).json({ error: 'Memory with this key already exists.' });
       }
 
-      const createResult = await createMemory({
+      const createResult = await createMemoryBB({
         userId: req.user.id,
         key: newKey,
         value,
@@ -248,12 +249,12 @@ router.patch('/:key', memoryPayloadLimit, checkMemoryUpdate, configMiddleware, a
         return res.status(500).json({ error: 'Failed to create new memory.' });
       }
 
-      const deleteResult = await deleteMemory({ userId: req.user.id, key: urlKey });
+      const deleteResult = await deleteMemoryBB({ userId: req.user.id, key: urlKey });
       if (!deleteResult.ok) {
         return res.status(500).json({ error: 'Failed to delete old memory.' });
       }
     } else {
-      const result = await setMemory({
+      const result = await setMemoryBB({
         userId: req.user.id,
         key: newKey,
         value,
@@ -265,7 +266,7 @@ router.patch('/:key', memoryPayloadLimit, checkMemoryUpdate, configMiddleware, a
       }
     }
 
-    const updatedMemories = await getAllUserMemories(req.user.id);
+    const updatedMemories = await getAllUserMemoriesBB(req.user.id);
     const updatedMemory = updatedMemories.find((m) => m.key === newKey);
 
     res.json({ updated: true, memory: updatedMemory });
@@ -283,7 +284,7 @@ router.delete('/:key', checkMemoryDelete, async (req, res) => {
   const { key } = req.params;
 
   try {
-    const result = await deleteMemory({ userId: req.user.id, key });
+    const result = await deleteMemoryBB({ userId: req.user.id, key });
 
     if (!result.ok) {
       return res.status(404).json({ error: 'Memory not found.' });
