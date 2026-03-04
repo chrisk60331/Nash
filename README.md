@@ -78,12 +78,9 @@ Beyond chat, Nash provides AI Agents, Model Context Protocol (MCP) support, Arti
 
 Open source, actively developed, and built for anyone who values control over their AI infrastructure.
 
-Based on [LibreChat](https://github.com/danny-avila/LibreChat) by Danny Avila.
-
 ---
 
 ## Resources
 
 - **Website:** [nash.backboard.io](https://nash.backboard.io)
 - **Backboard:** [backboard.io](https://backboard.io)
-- **Upstream:** [LibreChat](https://github.com/danny-avila/LibreChat)
