@@ -11,6 +11,7 @@ const abortMiddleware = require('./abortMiddleware');
 const checkInviteUser = require('./checkInviteUser');
 const requireJwtAuth = require('./requireJwtAuth');
 const configMiddleware = require('./config/app');
+const requireTokenBudget = require('./requireTokenBudget');
 const validateModel = require('./validateModel');
 const moderateText = require('./moderateText');
 const logHeaders = require('./logHeaders');
@@ -35,6 +36,7 @@ module.exports = {
   logHeaders,
   moderateText,
   validateModel,
+  requireTokenBudget,
   requireJwtAuth,
   checkInviteUser,
   requireLdapAuth,

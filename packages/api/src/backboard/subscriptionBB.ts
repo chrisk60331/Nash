@@ -81,6 +81,27 @@ export async function getSubscriptionBB(userId: string): Promise<SubscriptionDat
     }
     try {
       const data = JSON.parse(m.content) as SubscriptionData;
+
+      if (data.periodEnd && data.plan !== 'free' && new Date(data.periodEnd).getTime() < Date.now()) {
+        logger.info(`[SubscriptionBB] Billing period expired for ${userId}, resetting usage`);
+        const now = new Date();
+        const nextMonth = new Date(now);
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        const resetData: SubscriptionData = {
+          ...data,
+          usageTokens: 0,
+          periodStart: now.toISOString(),
+          periodEnd: nextMonth.toISOString(),
+        };
+        subscriptionCache.set(userId, { bbId: m.id, data: resetData, expiresAt: Date.now() + CACHE_TTL_MS });
+        updateSubscriptionBB(userId, {
+          usageTokens: 0,
+          periodStart: resetData.periodStart,
+          periodEnd: resetData.periodEnd,
+        }).catch((err) => logger.warn(`[SubscriptionBB] Failed to persist usage reset for ${userId}`, err));
+        return resetData;
+      }
+
       subscriptionCache.set(userId, { bbId: m.id, data, expiresAt: Date.now() + CACHE_TTL_MS });
       return data;
     } catch { /* skip malformed */ }

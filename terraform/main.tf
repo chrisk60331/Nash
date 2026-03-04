@@ -26,6 +26,9 @@ locals {
     SSO_SECRET           = var.sso_secret
     STRIPE_SECRET_KEY    = var.stripe_secret_key
     STRIPE_WEBHOOK_SECRET = var.stripe_webhook_secret
+    GOOGLE_CLIENT_ID     = var.google_client_id
+    GOOGLE_CLIENT_SECRET = var.google_client_secret
+
   }
 
   secrets = { for k, v in local._all_secrets : k => v if v != "" }
@@ -33,6 +36,7 @@ locals {
   environment_variables = merge(
     {
       HOST         = "0.0.0.0"
+      GOOGLE_CALLBACK_URL  = var.google_callback_url
       PORT         = tostring(var.container_port)
       NODE_ENV     = "production"
       CONSOLE_JSON = "true"
@@ -44,6 +48,10 @@ locals {
       ALLOW_UNVERIFIED_EMAIL_LOGIN=true
       SESSION_EXPIRY=1209600000
       REFRESH_TOKEN_EXPIRY=1209600000
+      ALLOW_SOCIAL_LOGIN=true
+      ALLOW_SOCIAL_REGISTRATION=true
+      STRIPE_PRICE_ID_PLUS= var.stripe_price_id_plus
+      STRIPE_PRICE_ID_UNLIMITED= var.stripe_price_id_unlimited
     },
     var.domain_client != "" ? { DOMAIN_CLIENT = var.domain_client } : {},
     var.domain_server != "" ? { DOMAIN_SERVER = var.domain_server } : {},

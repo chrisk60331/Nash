@@ -12,19 +12,18 @@
 #   ADMIN_RESET_SECRET   — must match the server's ADMIN_RESET_SECRET
 # =============================================================================
 set -euo pipefail
-
-BASE_URL="${BASE_URL:-http://localhost:3080}"
+NASH_URL="${NASH_URL:-http://localhost:3080}"
 SECRET="${ADMIN_RESET_SECRET:?Set ADMIN_RESET_SECRET to match the server}"
 
 EMAIL="${1:?Usage: $0 <email> [ADMIN|USER]}"
 ROLE="${2:-ADMIN}"
 
 echo "Promoting user to ${ROLE}..."
-echo "  Target: ${BASE_URL}"
+echo "  Target: ${NASH_URL}"
 echo "  Email:  ${EMAIL}"
 echo ""
 
-RESP=$(curl -sS -w "\n%{http_code}" -X POST "${BASE_URL}/api/admin/set-role" \
+RESP=$(curl -sS -w "\n%{http_code}" -X POST "${NASH_URL}/api/admin/set-role" \
   -H "Content-Type: application/json" \
   -H "x-admin-secret: ${SECRET}" \
   -d "{\"email\":\"${EMAIL}\",\"role\":\"${ROLE}\"}")

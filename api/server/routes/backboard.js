@@ -12,6 +12,7 @@ const {
   listAgentMappings,
   getSubscriptionBB,
   isFreeTierModel,
+  getIncludedTokens,
 } = require('@librechat/api');
 const { requireJwtAuth } = require('~/server/middleware');
 
@@ -31,6 +32,23 @@ router.post('/chat/completions', async (req, res, next) => {
           requiredPlan: 'plus',
           currentPlan: 'free',
         });
+      }
+
+      if (sub.plan !== 'free') {
+        const budget = getIncludedTokens(sub.plan);
+        if (budget > 0 && (sub.usageTokens ?? 0) >= budget) {
+          const isPlus = sub.plan === 'plus';
+          return res.status(403).json({
+            error: 'token_budget_exceeded',
+            message: isPlus
+              ? 'You\'ve used all your included tokens this billing period. Upgrade to Unlimited for 6x more usage, or wait for your next billing cycle.'
+              : 'You\'ve used all your included tokens this billing period. Usage resets at the start of your next billing cycle.',
+            currentPlan: sub.plan,
+            usageTokens: sub.usageTokens,
+            includedTokens: budget,
+            periodEnd: sub.periodEnd,
+          });
+        }
       }
     } catch (err) {
       logger.error('[Backboard Proxy] Subscription check failed, blocking request', err);

@@ -192,30 +192,35 @@ variable "stripe_secret_key" {
   type        = string
   description = "Stripe API secret key."
   sensitive   = true
-  default     = ""
+
 }
 
 variable "stripe_webhook_secret" {
   type        = string
   description = "Stripe webhook signing secret."
   sensitive   = true
-  default     = ""
+
 }
 
 variable "stripe_price_id_plus" {
   type        = string
   description = "Stripe Price ID for the Plus subscription tier."
-  default     = ""
+
 }
 
 variable "stripe_price_id_unlimited" {
   type        = string
   description = "Stripe Price ID for the Unlimited subscription tier."
-  default     = ""
 }
 
 variable "plus_included_tokens" {
   type        = string
   description = "Token allowance for Plus plan. Unlimited = 6x this value."
   default     = "500000"
+}
+
+variable google_client_id {}
+variable google_client_secret {}
+variable google_callback_url {
+  default = "/oauth/google/callback"
 }
