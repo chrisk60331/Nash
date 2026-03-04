@@ -19,7 +19,7 @@ set -euo pipefail
 
 APP_NAME="nash"
 AWS_REGION="us-west-2"
-AWS_ACCOUNT_ID="059623506914"
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity|jq -r '.Account')
 ECR_URL="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 TF_DIR="$(cd "$(dirname "$0")/terraform" && pwd)"
 
