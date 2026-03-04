@@ -5,7 +5,7 @@ export interface Endpoint {
   value: string;
   label: string;
   hasModels: boolean;
-  models?: Array<{ name: string; isGlobal?: boolean }>;
+  models?: Array<{ name: string; isGlobal?: boolean; isPremium?: boolean }>;
   icon: React.ReactNode;
   agentNames?: Record<string, string>;
   assistantNames?: Record<string, string>;

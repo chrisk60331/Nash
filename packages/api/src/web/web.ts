@@ -2,17 +2,19 @@ import {
   AuthType,
   SafeSearchTypes,
   SearchCategories,
+  SearchProviders,
   extractVariableName,
 } from 'librechat-data-provider';
 import { webSearchAuth } from '@librechat/data-schemas';
 import type {
   RerankerTypes,
   TCustomConfig,
-  SearchProviders,
   ScraperProviders,
   TWebSearchConfig,
 } from 'librechat-data-provider';
 import type { TWebSearchKeys, TWebSearchCategories } from '@librechat/data-schemas';
+
+const SELF_CONTAINED_PROVIDERS = new Set<string>([SearchProviders.ZAI]);
 
 export function extractWebSearchEnvVars({
   keys,
@@ -183,7 +185,16 @@ export async function loadWebSearchAuth({
     SearchCategories.RERANKERS,
   ] as const;
   const authTypes: [TWebSearchCategories, AuthType][] = [];
+
+  const isSelfContained = SELF_CONTAINED_PROVIDERS.has(
+    webSearchConfig?.searchProvider?.toLowerCase() ?? '',
+  );
+
   for (const category of categories) {
+    if (isSelfContained && category !== SearchCategories.PROVIDERS) {
+      authTypes.push([category, AuthType.SYSTEM_DEFINED]);
+      continue;
+    }
     const [isCategoryAuthenticated, isUserProvided] = await checkAuth(category);
     if (!isCategoryAuthenticated) {
       authenticated = false;

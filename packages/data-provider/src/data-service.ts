@@ -1104,3 +1104,86 @@ export interface ActiveJobsResponse {
 export const getActiveJobs = (): Promise<ActiveJobsResponse> => {
   return request.get(endpoints.activeJobs());
 };
+
+/* Billing */
+export interface BillingSubscription {
+  plan: 'free' | 'plus' | 'unlimited';
+  usageTokens: number;
+  includedTokens: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  stripeSubscriptionId: string | null;
+}
+
+export interface CheckoutResponse {
+  url: string;
+}
+
+export interface PortalResponse {
+  url: string;
+}
+
+export const getBillingSubscription = (): Promise<BillingSubscription> => {
+  return request.get(endpoints.billingSubscription());
+};
+
+export const createBillingCheckout = (priceId: string): Promise<CheckoutResponse> => {
+  return request.post(endpoints.billingCheckout(), { priceId });
+};
+
+export const createBillingPortal = (): Promise<PortalResponse> => {
+  return request.post(endpoints.billingPortal(), {});
+};
+
+/* Admin */
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+  role: string;
+  provider: string;
+  createdAt: string | null;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUser[];
+  total: number;
+}
+
+export interface AdminSubscription {
+  plan: 'free' | 'plus' | 'unlimited';
+  usageTokens: number;
+  includedTokens: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+}
+
+export const getAdminUsers = (q?: string): Promise<AdminUsersResponse> => {
+  return request.get(endpoints.adminUsers(q));
+};
+
+export const getAdminUserSubscription = (userId: string): Promise<AdminSubscription> => {
+  return request.get(endpoints.adminUserSubscription(userId));
+};
+
+export const updateAdminUserSubscription = (
+  userId: string,
+  data: { plan?: string; usageTokens?: number },
+): Promise<AdminSubscription> => {
+  return request.put(endpoints.adminUserSubscription(userId), data);
+};
+
+export interface SetRoleResponse {
+  userId: string;
+  role: string;
+}
+
+export const setAdminUserRole = (
+  userId: string,
+  role: string,
+): Promise<SetRoleResponse> => {
+  return request.patch(endpoints.adminSetRole(), { userId, role });
+};

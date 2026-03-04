@@ -19,6 +19,38 @@ type Source = {
   citationKey: string; // Used for deduplication
 };
 
+function getRenderedHtml(messageId?: string | null): string | null {
+  if (!messageId) {
+    return null;
+  }
+  const container = document.getElementById(messageId);
+  if (!container) {
+    return null;
+  }
+  const contentEl = container.querySelector('.message-content');
+  if (!contentEl) {
+    return null;
+  }
+  const clone = contentEl.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('button, .copy-button, .hover-button').forEach((el) => el.remove());
+  return clone.innerHTML;
+}
+
+function copyWithRichText(plainText: string, messageId?: string | null): void {
+  const html = getRenderedHtml(messageId);
+  if (html && typeof navigator.clipboard?.write === 'function') {
+    const htmlBlob = new Blob([html], { type: 'text/html' });
+    const textBlob = new Blob([plainText], { type: 'text/plain' });
+    navigator.clipboard
+      .write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })])
+      .catch(() => {
+        copy(plainText, { format: 'text/plain' });
+      });
+  } else {
+    copy(plainText, { format: 'text/plain' });
+  }
+}
+
 const refTypeMap: Record<string, string> = {
   search: 'organic',
   ref: 'references',
@@ -30,8 +62,10 @@ const refTypeMap: Record<string, string> = {
 export default function useCopyToClipboard({
   text,
   content,
+  messageId,
   searchResults,
 }: Partial<Pick<TMessage, 'text' | 'content'>> & {
+  messageId?: string | null;
   searchResults?: { [key: string]: SearchResultData };
 }) {
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -65,12 +99,11 @@ export default function useCopyToClipboard({
 
       // Early return if no search data
       if (!searchResults || Object.keys(searchResults).length === 0) {
-        // Clean up any citation markers before returning
         const cleanedText = messageText
           .replace(INVALID_CITATION_REGEX, '')
           .replace(CLEANUP_REGEX, '');
 
-        copy(cleanedText, { format: 'text/plain' });
+        copyWithRichText(cleanedText, messageId);
         copyTimeoutRef.current = setTimeout(() => {
           setIsCopied(false);
         }, 3000);
@@ -95,12 +128,12 @@ export default function useCopyToClipboard({
         }
       }
 
-      copy(processedText, { format: 'text/plain' });
+      copyWithRichText(processedText, messageId);
       copyTimeoutRef.current = setTimeout(() => {
         setIsCopied(false);
       }, 3000);
     },
-    [text, content, searchResults],
+    [text, content, messageId, searchResults],
   );
 
   return copyToClipboard;

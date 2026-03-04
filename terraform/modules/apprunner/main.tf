@@ -111,3 +111,12 @@ resource "aws_apprunner_service" "this" {
     unhealthy_threshold = var.health_check_unhealthy_threshold
   }
 }
+
+# --- Custom Domain ---
+
+resource "aws_apprunner_custom_domain_association" "this" {
+  count                          = var.custom_domain != "" ? 1 : 0
+  domain_name                    = var.custom_domain
+  service_arn                    = aws_apprunner_service.this.arn
+  enable_www_subdomain = false
+}

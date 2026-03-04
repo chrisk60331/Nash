@@ -12,6 +12,9 @@ export const webSearchAuth = {
       /** Optional (0) */
       searxngApiKey: 0 as const,
     },
+    zai: {
+      zaiApiKey: 1 as const,
+    },
   },
   scrapers: {
     firecrawl: {
@@ -66,6 +69,7 @@ export function loadWebSearchConfig(
   const serperApiKey = config?.serperApiKey ?? '${SERPER_API_KEY}';
   const searxngInstanceUrl = config?.searxngInstanceUrl ?? '${SEARXNG_INSTANCE_URL}';
   const searxngApiKey = config?.searxngApiKey ?? '${SEARXNG_API_KEY}';
+  const zaiApiKey = config?.zaiApiKey ?? '${Z_API_KEY}';
   const firecrawlApiKey = config?.firecrawlApiKey ?? '${FIRECRAWL_API_KEY}';
   const firecrawlApiUrl = config?.firecrawlApiUrl ?? '${FIRECRAWL_API_URL}';
   const firecrawlVersion = config?.firecrawlVersion ?? '${FIRECRAWL_VERSION}';
@@ -82,6 +86,7 @@ export function loadWebSearchConfig(
     cohereApiKey,
     serperApiKey,
     searxngApiKey,
+    zaiApiKey,
     firecrawlApiKey,
     firecrawlApiUrl,
     firecrawlVersion,

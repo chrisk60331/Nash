@@ -6,6 +6,7 @@ export {
   getUserCache,
   invalidateUserCache,
   findUserForConvo,
+  flushAllPending,
 } from './userStore';
 export {
   getAuthAssistantId,
@@ -19,6 +20,7 @@ export {
   createMemoryBB,
   setMemoryBB,
   deleteMemoryBB,
+  getFormattedMemoriesBB,
 } from './memories';
 export {
   getPresetsBB,
@@ -122,6 +124,7 @@ export {
   createFileBB,
   updateFileBB,
   updateFileUsageBB,
+  updateFilesUsageBB,
   deleteFileBB,
   deleteFilesBB,
   deleteFileByFilterBB,
@@ -143,6 +146,18 @@ export {
   createAutoRefillTransactionBB,
   createStructuredTransactionBB,
 } from './balanceBB';
+export {
+  getSubscriptionBB,
+  updateSubscriptionBB,
+  recordUsageBB,
+  resetPeriodUsageBB,
+  invalidateSubscriptionCache,
+  getIncludedTokens,
+  planMeetsMinimum,
+  FREE_TIER_PROVIDERS,
+  isFreeTierModel,
+} from './subscriptionBB';
+export type { PlanTier, SubscriptionData } from './subscriptionBB';
 export {
   getUserKeyBB,
   updateUserKeyBB,

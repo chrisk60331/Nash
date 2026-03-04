@@ -93,15 +93,16 @@ export function backfillRemoteAgentPermissions(
       }
 
       const promises = entriesToBackfill.map((principalId) =>
-        grantPermissionBB({
-          principalType: PrincipalType.USER,
+        grantPermissionBB(
+          PrincipalType.USER,
           principalId,
-          resourceType: ResourceType.REMOTE_AGENT,
+          ResourceType.REMOTE_AGENT,
           resourceId,
-          permBits: role.permBits as number,
-          roleId: (role._id ?? role.id ?? '') as string,
-          grantedBy: principalId,
-        }),
+          role.permBits as number,
+          principalId,
+          undefined,
+          (role._id ?? role.id ?? '') as string,
+        ),
       );
 
       return Promise.all(promises);

@@ -16,6 +16,7 @@ import type {
 } from 'librechat-data-provider';
 import type { Endpoint } from '~/common';
 import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetSubscription } from '~/data-provider/Billing/queries';
 import { mapEndpoints, getIconKey } from '~/utils';
 import { useHasAccess } from '~/hooks';
 import { icons } from './Icons';
@@ -33,6 +34,11 @@ export const useEndpoints = ({
 }) => {
   const modelsQuery = useGetModelsQuery();
   const { data: endpoints = [] } = useGetEndpointsQuery({ select: mapEndpoints });
+
+  const billingEnabled = startupConfig?.billing?.enabled === true;
+  const freeModels = startupConfig?.billing?.freeModels;
+  const { data: subscription } = useGetSubscription({ enabled: billingEnabled });
+  const isFreePlan = billingEnabled && subscription?.plan === 'free';
   const interfaceConfig = startupConfig?.interface ?? {};
   const includedEndpoints = useMemo(
     () => new Set(startupConfig?.modelSpecs?.addedEndpoints ?? []),
@@ -77,6 +83,20 @@ export const useEndpoints = ({
       return !!getEndpointField(endpointsConfig, ep, 'userProvide');
     },
     [endpointsConfig],
+  );
+
+  const isModelPremium = useCallback(
+    (modelName: string): boolean => {
+      if (!isFreePlan || !freeModels?.length) {
+        return false;
+      }
+      const segments = modelName.toLowerCase().split('/');
+      const isFree = freeModels.some((p) =>
+        segments.some((seg) => seg === p || seg.startsWith(`${p}-`)),
+      );
+      return !isFree;
+    },
+    [isFreePlan, freeModels],
   );
 
   const mappedEndpoints: Endpoint[] = useMemo(() => {
@@ -170,15 +190,16 @@ export const useEndpoints = ({
         ep !== EModelEndpoint.assistants &&
         (modelsQuery.data?.[ep]?.length ?? 0) > 0
       ) {
-        result.models = modelsQuery.data?.[ep]?.map((model) => ({
+        result.models = (modelsQuery.data?.[ep] ?? []).map((model) => ({
           name: model,
           isGlobal: false,
+          isPremium: isModelPremium(model),
         }));
       }
 
       return result;
     });
-  }, [filteredEndpoints, endpointsConfig, modelsQuery.data, agents, assistants, azureAssistants]);
+  }, [filteredEndpoints, endpointsConfig, modelsQuery.data, agents, assistants, azureAssistants, isModelPremium]);
 
   return {
     mappedEndpoints,

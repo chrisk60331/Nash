@@ -163,7 +163,7 @@ const refreshController = async (req, res) => {
     );
 
     if (session && session.expiration > new Date()) {
-      const token = await setAuthTokens(userId, res, session);
+      const token = await setAuthTokens(userId, res, session, refreshToken);
 
       res.status(200).send({ token, user });
     } else if (req?.query?.retry) {

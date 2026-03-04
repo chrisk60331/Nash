@@ -160,16 +160,59 @@ export async function initializeCustom({
     ...customOptions,
   };
 
+  const existingHeaders = (clientOptions.headers ?? {}) as Record<string, string>;
+  const mergedHeaders = { ...existingHeaders };
+
+  if (userId) {
+    mergedHeaders['x-backboard-user-id'] = userId;
+  }
+
+  const userName = (req.user?.name ?? req.user?.username ?? '') as string;
+  if (userName) {
+    mergedHeaders['x-backboard-user-name'] = userName;
+  }
+
+  const conversationId = req.body?.conversationId as string | undefined;
+  if (conversationId && conversationId !== 'new' && conversationId !== 'PENDING') {
+    mergedHeaders['x-backboard-conversation-id'] = conversationId;
+  }
+
+  const reqFiles = req.body?.files as Array<Record<string, unknown>> | undefined;
+  if (reqFiles && reqFiles.length > 0) {
+    const fileMeta = reqFiles
+      .filter((f) => f.filepath && f.file_id)
+      .map((f) => {
+        const fp = f.filepath as string;
+        const basename = fp.split('/').pop() ?? 'upload';
+        const filename = basename.replace(/^[^_]+__/, '');
+        return {
+          file_id: f.file_id as string,
+          filepath: fp,
+          filename,
+          type: (f.type ?? 'application/octet-stream') as string,
+        };
+      });
+    if (fileMeta.length > 0) {
+      mergedHeaders['x-backboard-files'] = JSON.stringify(fileMeta);
+    }
+  }
+
+  const ephemeralAgent = req.body?.ephemeralAgent as Record<string, unknown> | undefined;
+  if (ephemeralAgent?.web_search === true) {
+    mergedHeaders['x-backboard-web-search'] = 'Auto';
+  }
+
+  const memoryMode = ephemeralAgent?.memory;
+  if (typeof memoryMode === 'string' && ['On', 'Off', 'Auto'].includes(memoryMode)) {
+    mergedHeaders['x-backboard-memory'] = memoryMode;
+  }
+
   const folderId = req.body?.folderId as string | undefined;
   if (folderId && userId) {
     try {
       const folder = await getFolderBB(userId, folderId);
       if (folder?.assistantId) {
-        const existingHeaders = (clientOptions.headers ?? {}) as Record<string, string>;
-        clientOptions.headers = {
-          ...existingHeaders,
-          'x-backboard-assistant-id': folder.assistantId,
-        };
+        mergedHeaders['x-backboard-assistant-id'] = folder.assistantId;
         logger.info(
           `[Custom Init] Folder "${folder.name}" → assistant ${folder.assistantId}`,
         );
@@ -178,6 +221,8 @@ export async function initializeCustom({
       logger.warn('[Custom Init] Failed to look up folder assistant:', err);
     }
   }
+
+  clientOptions.headers = mergedHeaders;
 
   const modelOptions = { ...(model_parameters ?? {}), user: userId };
   const finalClientOptions = {

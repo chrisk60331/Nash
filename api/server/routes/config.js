@@ -1,6 +1,6 @@
 const express = require('express');
 const { logger } = require('@librechat/data-schemas');
-const { isEnabled, getBalanceConfig } = require('@librechat/api');
+const { isEnabled, getBalanceConfig, FREE_TIER_PROVIDERS } = require('@librechat/api');
 const { Constants, CacheKeys, defaultSocialLogins } = require('librechat-data-provider');
 const { getLdapConfig } = require('~/server/services/Config/ldap');
 const { getAppConfig } = require('~/server/services/Config/app');
@@ -113,6 +113,16 @@ router.get('/', async function (req, res) {
         ? parseInt(process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES, 10)
         : 0,
     };
+
+    const billingEnabled = !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_PRICE_ID_PLUS;
+    if (billingEnabled) {
+      payload.billing = {
+        enabled: true,
+        freeModels: FREE_TIER_PROVIDERS,
+        priceIdPlus: process.env.STRIPE_PRICE_ID_PLUS,
+        priceIdUnlimited: process.env.STRIPE_PRICE_ID_UNLIMITED,
+      };
+    }
 
     const minPasswordLength = parseInt(process.env.MIN_PASSWORD_LENGTH, 10);
     if (minPasswordLength && !isNaN(minPasswordLength)) {

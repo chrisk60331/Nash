@@ -10,13 +10,38 @@ const {
   deleteBackboardDocument,
   syncAgentToBackboard,
   listAgentMappings,
+  getSubscriptionBB,
+  isFreeTierModel,
 } = require('@librechat/api');
 const { requireJwtAuth } = require('~/server/middleware');
 
 const router = express.Router();
 const upload = multer({ dest: '/tmp/backboard-uploads' });
 
-router.post('/chat/completions', (req, res) => handleChatCompletions(req, res));
+router.post('/chat/completions', async (req, res, next) => {
+  const userId = req.headers['x-backboard-user-id'];
+  if (userId) {
+    try {
+      const sub = await getSubscriptionBB(userId);
+      const model = req.body?.model ?? '';
+      if (sub.plan === 'free' && !isFreeTierModel(model)) {
+        return res.status(403).json({
+          error: 'upgrade_required',
+          message: 'This model requires a Plus or Unlimited plan.',
+          requiredPlan: 'plus',
+          currentPlan: 'free',
+        });
+      }
+    } catch (err) {
+      logger.error('[Backboard Proxy] Subscription check failed, blocking request', err);
+      return res.status(500).json({
+        error: 'subscription_check_failed',
+        message: 'Unable to verify subscription status.',
+      });
+    }
+  }
+  return handleChatCompletions(req, res);
+});
 router.get('/models', (req, res) => handleListModels(req, res));
 
 router.get('/documents', requireJwtAuth, async (req, res) => {

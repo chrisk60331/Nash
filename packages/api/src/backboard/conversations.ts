@@ -64,7 +64,7 @@ export async function saveConvoBB(
     newConversationId,
     ...convo
   }: Record<string, unknown> & { conversationId: string; newConversationId?: string },
-  metadata?: { context?: string; noUpsert?: boolean; unsetFields?: Record<string, number> },
+  metadata?: { context?: string; noUpsert?: boolean; immediate?: boolean; unsetFields?: Record<string, number> },
 ): Promise<Record<string, unknown> | null> {
   try {
     if (metadata?.context) {
@@ -109,7 +109,7 @@ export async function saveConvoBB(
 
     update.expiredAt = null;
 
-    const result = await upsertConvo(userId, targetId, update);
+    const result = await upsertConvo(userId, targetId, update, { immediate: metadata?.immediate });
     return result;
   } catch (error) {
     logger.error('[saveConvoBB] Error saving conversation', error);

@@ -319,6 +319,35 @@ export async function updateFileUsageBB(
   return updated;
 }
 
+export async function updateFilesUsageBB(
+  files: Array<{ file_id: string }>,
+  fileIds?: string[],
+): Promise<Record<string, unknown>[]> {
+  const seen = new Set<string>();
+  const promises: Promise<Record<string, unknown> | null>[] = [];
+
+  for (const file of files) {
+    if (seen.has(file.file_id)) {
+      continue;
+    }
+    seen.add(file.file_id);
+    promises.push(updateFileUsageBB({ file_id: file.file_id }));
+  }
+
+  if (fileIds) {
+    for (const fid of fileIds) {
+      if (seen.has(fid)) {
+        continue;
+      }
+      seen.add(fid);
+      promises.push(updateFileUsageBB({ file_id: fid }));
+    }
+  }
+
+  const results = await Promise.all(promises);
+  return results.filter((r): r is Record<string, unknown> => r != null);
+}
+
 export async function deleteFileBB(
   userId: string,
   fileId: string,

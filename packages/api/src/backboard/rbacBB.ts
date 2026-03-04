@@ -186,13 +186,23 @@ export async function findAccessRoleByIdBB(
 }
 
 export async function seedDefaultRolesBB(): Promise<Record<string, Record<string, unknown>>> {
+  const VIEW = 1;
+  const EDITOR = 3;
+  const OWNER = 15;
+
   const defaultRoles = [
-    { accessRoleId: 'agent_viewer', name: 'com_ui_role_viewer', resourceType: 'agent', permBits: 1 },
-    { accessRoleId: 'agent_editor', name: 'com_ui_role_editor', resourceType: 'agent', permBits: 3 },
-    { accessRoleId: 'agent_owner', name: 'com_ui_role_owner', resourceType: 'agent', permBits: 7 },
-    { accessRoleId: 'promptgroup_viewer', name: 'com_ui_role_viewer', resourceType: 'promptGroup', permBits: 1 },
-    { accessRoleId: 'promptgroup_editor', name: 'com_ui_role_editor', resourceType: 'promptGroup', permBits: 3 },
-    { accessRoleId: 'promptgroup_owner', name: 'com_ui_role_owner', resourceType: 'promptGroup', permBits: 7 },
+    { accessRoleId: 'agent_viewer', name: 'com_ui_role_viewer', resourceType: 'agent', permBits: VIEW },
+    { accessRoleId: 'agent_editor', name: 'com_ui_role_editor', resourceType: 'agent', permBits: EDITOR },
+    { accessRoleId: 'agent_owner', name: 'com_ui_role_owner', resourceType: 'agent', permBits: OWNER },
+    { accessRoleId: 'promptGroup_viewer', name: 'com_ui_role_viewer', resourceType: 'promptGroup', permBits: VIEW },
+    { accessRoleId: 'promptGroup_editor', name: 'com_ui_role_editor', resourceType: 'promptGroup', permBits: EDITOR },
+    { accessRoleId: 'promptGroup_owner', name: 'com_ui_role_owner', resourceType: 'promptGroup', permBits: OWNER },
+    { accessRoleId: 'mcpServer_viewer', name: 'com_ui_mcp_server_role_viewer', resourceType: 'mcpServer', permBits: VIEW },
+    { accessRoleId: 'mcpServer_editor', name: 'com_ui_mcp_server_role_editor', resourceType: 'mcpServer', permBits: EDITOR },
+    { accessRoleId: 'mcpServer_owner', name: 'com_ui_mcp_server_role_owner', resourceType: 'mcpServer', permBits: OWNER },
+    { accessRoleId: 'remoteAgent_viewer', name: 'com_ui_remote_agent_role_viewer', resourceType: 'remoteAgent', permBits: VIEW },
+    { accessRoleId: 'remoteAgent_editor', name: 'com_ui_remote_agent_role_editor', resourceType: 'remoteAgent', permBits: EDITOR },
+    { accessRoleId: 'remoteAgent_owner', name: 'com_ui_remote_agent_role_owner', resourceType: 'remoteAgent', permBits: OWNER },
   ];
 
   const result: Record<string, Record<string, unknown>> = {};
@@ -263,12 +273,13 @@ function buildAclKey(entry: Record<string, unknown>): string {
 }
 
 export async function findEntriesByPrincipalBB(
+  _principalType: string,
   principalId: string,
   resourceType?: string,
 ): Promise<Record<string, unknown>[]> {
   const items = await backboardStorage.listByType(ACLENTRY_TYPE);
   return items.map(parseItem).filter((e) => {
-    if (e.principalId !== principalId) {
+    if (String(e.principalId) !== String(principalId)) {
       return false;
     }
     if (resourceType && e.resourceType !== resourceType) {
@@ -279,8 +290,8 @@ export async function findEntriesByPrincipalBB(
 }
 
 export async function findEntriesByResourceBB(
+  resourceType: string,
   resourceId: string,
-  resourceType?: string,
 ): Promise<Record<string, unknown>[]> {
   const items = await backboardStorage.listByType(ACLENTRY_TYPE);
   return items.map(parseItem).filter((e) => {
@@ -296,6 +307,7 @@ export async function findEntriesByResourceBB(
 
 export async function findEntriesByPrincipalsAndResourceBB(
   principalIds: Array<{ principalType: string; principalId?: string }>,
+  resourceType: string,
   resourceId: string,
 ): Promise<Record<string, unknown>[]> {
   const items = await backboardStorage.listByType(ACLENTRY_TYPE);
@@ -303,6 +315,9 @@ export async function findEntriesByPrincipalsAndResourceBB(
 
   return allEntries.filter((e) => {
     if (String(e.resourceId) !== String(resourceId)) {
+      return false;
+    }
+    if (resourceType && e.resourceType !== resourceType) {
       return false;
     }
     return principalIds.some((p) => {
@@ -314,24 +329,24 @@ export async function findEntriesByPrincipalsAndResourceBB(
   });
 }
 
-export async function hasPermissionBB(params: {
-  principalsList: Array<{ principalType: string; principalId?: string }>;
-  resourceType: string;
-  resourceId: string;
-  permissionBit: number;
-}): Promise<boolean> {
+export async function hasPermissionBB(
+  principalsList: Array<{ principalType: string; principalId?: string }>,
+  resourceType: string,
+  resourceId: string,
+  permissionBit: number,
+): Promise<boolean> {
   const items = await backboardStorage.listByType(ACLENTRY_TYPE);
   const allEntries = items.map(parseItem);
 
   return allEntries.some((e) => {
-    if (e.resourceType !== params.resourceType || String(e.resourceId) !== String(params.resourceId)) {
+    if (e.resourceType !== resourceType || String(e.resourceId) !== String(resourceId)) {
       return false;
     }
     const bits = (e.permBits as number) ?? 0;
-    if ((bits & params.permissionBit) !== params.permissionBit) {
+    if ((bits & permissionBit) !== permissionBit) {
       return false;
     }
-    return params.principalsList.some((p) => {
+    return principalsList.some((p) => {
       if (p.principalType === 'public') {
         return e.principalType === 'public';
       }
@@ -340,48 +355,47 @@ export async function hasPermissionBB(params: {
   });
 }
 
-export async function getEffectivePermissionsBB(params: {
-  principalsList: Array<{ principalType: string; principalId?: string }>;
-  resourceType: string;
-  resourceId: string;
-}): Promise<number> {
+export async function getEffectivePermissionsBB(
+  principalsList: Array<{ principalType: string; principalId?: string }>,
+  resourceType: string,
+  resourceId: string,
+): Promise<number> {
   const entries = await findEntriesByPrincipalsAndResourceBB(
-    params.principalsList,
-    params.resourceId,
+    principalsList,
+    resourceType,
+    resourceId,
   );
 
   let bits = 0;
   for (const entry of entries) {
-    if (entry.resourceType === params.resourceType) {
-      bits |= (entry.permBits as number) ?? 0;
-    }
+    bits |= (entry.permBits as number) ?? 0;
   }
   return bits;
 }
 
-export async function getEffectivePermissionsForResourcesBB(params: {
-  principalsList: Array<{ principalType: string; principalId?: string }>;
-  resourceType: string;
-  resourceIds: string[];
-}): Promise<Map<string, number>> {
+export async function getEffectivePermissionsForResourcesBB(
+  principalsList: Array<{ principalType: string; principalId?: string }>,
+  resourceType: string,
+  resourceIds: string[],
+): Promise<Map<string, number>> {
   const result = new Map<string, number>();
-  if (!params.resourceIds || params.resourceIds.length === 0) {
+  if (!resourceIds || resourceIds.length === 0) {
     return result;
   }
 
   const items = await backboardStorage.listByType(ACLENTRY_TYPE);
   const allEntries = items.map(parseItem);
-  const resourceSet = new Set(params.resourceIds.map(String));
+  const resourceSet = new Set(resourceIds.map(String));
 
   for (const entry of allEntries) {
-    if (entry.resourceType !== params.resourceType) {
+    if (entry.resourceType !== resourceType) {
       continue;
     }
     const rid = String(entry.resourceId);
     if (!resourceSet.has(rid)) {
       continue;
     }
-    const matchesPrincipal = params.principalsList.some((p) => {
+    const matchesPrincipal = principalsList.some((p) => {
       if (p.principalType === 'public') {
         return entry.principalType === 'public';
       }
@@ -396,21 +410,17 @@ export async function getEffectivePermissionsForResourcesBB(params: {
   return result;
 }
 
-export async function grantPermissionBB(params: {
-  principalType: string;
-  principalId: string | null;
-  resourceType: string;
-  resourceId: string;
-  permBits: number;
-  grantedBy: string;
-  roleId?: string;
-}): Promise<Record<string, unknown>> {
-  const aclKey = buildAclKey({
-    principalType: params.principalType,
-    principalId: params.principalId,
-    resourceType: params.resourceType,
-    resourceId: params.resourceId,
-  });
+export async function grantPermissionBB(
+  principalType: string,
+  principalId: string | null,
+  resourceType: string,
+  resourceId: string,
+  permBits: number,
+  grantedBy: string,
+  _session?: unknown,
+  roleId?: string,
+): Promise<Record<string, unknown>> {
+  const aclKey = buildAclKey({ principalType, principalId, resourceType, resourceId });
 
   const existing = await backboardStorage.findByMetadata(ACLENTRY_TYPE, 'aclKey', aclKey);
   if (existing) {
@@ -418,16 +428,16 @@ export async function grantPermissionBB(params: {
   }
 
   const entryData: Record<string, unknown> = {
-    principalType: params.principalType,
-    principalId: params.principalId,
-    resourceType: params.resourceType,
-    resourceId: params.resourceId,
-    permBits: params.permBits,
-    grantedBy: params.grantedBy,
+    principalType,
+    principalId,
+    resourceType,
+    resourceId,
+    permBits,
+    grantedBy,
     grantedAt: new Date().toISOString(),
   };
-  if (params.roleId) {
-    entryData.roleId = params.roleId;
+  if (roleId) {
+    entryData.roleId = roleId;
   }
 
   const item = await backboardStorage.createItem(JSON.stringify(entryData), {
@@ -438,18 +448,14 @@ export async function grantPermissionBB(params: {
   return entryData;
 }
 
-export async function revokePermissionBB(params: {
-  principalType: string;
-  principalId: string | null;
-  resourceType: string;
-  resourceId: string;
-}): Promise<{ deletedCount: number }> {
-  const aclKey = buildAclKey({
-    principalType: params.principalType,
-    principalId: params.principalId,
-    resourceType: params.resourceType,
-    resourceId: params.resourceId,
-  });
+export async function revokePermissionBB(
+  principalType: string,
+  principalId: string | null,
+  resourceType: string,
+  resourceId: string,
+  _session?: unknown,
+): Promise<{ deletedCount: number }> {
+  const aclKey = buildAclKey({ principalType, principalId, resourceType, resourceId });
 
   const existing = await backboardStorage.findByMetadata(ACLENTRY_TYPE, 'aclKey', aclKey);
   if (!existing) {
@@ -459,20 +465,16 @@ export async function revokePermissionBB(params: {
   return { deletedCount: 1 };
 }
 
-export async function modifyPermissionBitsBB(params: {
-  principalType: string;
-  principalId: string | null;
-  resourceType: string;
-  resourceId: string;
-  addBits?: number | null;
-  removeBits?: number | null;
-}): Promise<Record<string, unknown> | null> {
-  const aclKey = buildAclKey({
-    principalType: params.principalType,
-    principalId: params.principalId,
-    resourceType: params.resourceType,
-    resourceId: params.resourceId,
-  });
+export async function modifyPermissionBitsBB(
+  principalType: string,
+  principalId: string | null,
+  resourceType: string,
+  resourceId: string,
+  addBits?: number | null,
+  removeBits?: number | null,
+  _session?: unknown,
+): Promise<Record<string, unknown> | null> {
+  const aclKey = buildAclKey({ principalType, principalId, resourceType, resourceId });
 
   const existing = await backboardStorage.findByMetadata(ACLENTRY_TYPE, 'aclKey', aclKey);
   if (!existing) {
@@ -481,11 +483,11 @@ export async function modifyPermissionBitsBB(params: {
 
   const entry = parseItem(existing);
   let bits = (entry.permBits as number) ?? 0;
-  if (params.addBits) {
-    bits |= params.addBits;
+  if (addBits) {
+    bits |= addBits;
   }
-  if (params.removeBits) {
-    bits &= ~params.removeBits;
+  if (removeBits) {
+    bits &= ~removeBits;
   }
   entry.permBits = bits;
 
@@ -499,24 +501,24 @@ export async function modifyPermissionBitsBB(params: {
   return entryData;
 }
 
-export async function findAccessibleResourcesBB(params: {
-  principalsList: Array<{ principalType: string; principalId?: string }>;
-  resourceType: string;
-  requiredPermBit: number;
-}): Promise<string[]> {
+export async function findAccessibleResourcesBB(
+  principalsList: Array<{ principalType: string; principalId?: string }>,
+  resourceType: string,
+  requiredPermBit: number,
+): Promise<string[]> {
   const items = await backboardStorage.listByType(ACLENTRY_TYPE);
   const allEntries = items.map(parseItem);
   const resourceIds = new Set<string>();
 
   for (const entry of allEntries) {
-    if (entry.resourceType !== params.resourceType) {
+    if (entry.resourceType !== resourceType) {
       continue;
     }
     const bits = (entry.permBits as number) ?? 0;
-    if ((bits & params.requiredPermBit) !== params.requiredPermBit) {
+    if ((bits & requiredPermBit) !== requiredPermBit) {
       continue;
     }
-    const matchesPrincipal = params.principalsList.some((p) => {
+    const matchesPrincipal = principalsList.some((p) => {
       if (p.principalType === 'public') {
         return entry.principalType === 'public';
       }
@@ -678,8 +680,10 @@ export async function getUserGroupsBB(
 }
 
 export async function getUserPrincipalsBB(
-  userId: string,
+  params: { userId: string; role?: string | null },
+  _session?: unknown,
 ): Promise<Array<{ principalType: string; principalId?: string }>> {
+  const { userId } = params;
   const principals: Array<{ principalType: string; principalId?: string }> = [
     { principalType: 'user', principalId: userId },
   ];

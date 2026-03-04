@@ -1,4 +1,5 @@
 const { logger } = require('@librechat/data-schemas');
+const { recordUsageBB } = require('@librechat/api');
 const { createTransaction, createStructuredTransaction } = require('./Transaction');
 /**
  * Creates up to two transactions to record the spending of tokens.
@@ -55,6 +56,13 @@ const spendTokens = async (txData, tokenUsage) => {
       });
     } else {
       logger.debug('[spendTokens] No transactions incurred against balance');
+    }
+
+    const totalTokens = (promptTokens ?? 0) + (completionTokens ?? 0);
+    if (totalTokens > 0 && txData.user) {
+      recordUsageBB(txData.user, totalTokens).catch((err) =>
+        logger.warn('[spendTokens] Failed to record usage', err),
+      );
     }
   } catch (err) {
     logger.error('[spendTokens]', err);
@@ -129,6 +137,16 @@ const spendStructuredTokens = async (txData, tokenUsage) => {
       });
     } else {
       logger.debug('[spendStructuredTokens] No transactions incurred against balance');
+    }
+
+    const inputTotal = promptTokens
+      ? (promptTokens.input ?? 0) + (promptTokens.write ?? 0) + (promptTokens.read ?? 0)
+      : 0;
+    const totalTokens = inputTotal + (completionTokens ?? 0);
+    if (totalTokens > 0 && txData.user) {
+      recordUsageBB(txData.user, totalTokens).catch((err) =>
+        logger.warn('[spendStructuredTokens] Failed to record usage', err),
+      );
     }
   } catch (err) {
     logger.error('[spendStructuredTokens]', err);

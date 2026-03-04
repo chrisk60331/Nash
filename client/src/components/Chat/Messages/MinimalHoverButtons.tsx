@@ -14,6 +14,7 @@ export default function MinimalHoverButtons({ message, searchResults }: THoverBu
   const copyToClipboard = useCopyToClipboard({
     text: message.text,
     content: message.content,
+    messageId: message.messageId,
     searchResults,
   });
 

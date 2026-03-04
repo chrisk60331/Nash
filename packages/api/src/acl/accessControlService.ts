@@ -56,15 +56,16 @@ export class AccessControlService {
         throw new Error(`Role ${accessRoleId} is for ${role.resourceType} resources, not ${resourceType}`);
       }
 
-      return await grantPermissionBB({
+      return await grantPermissionBB(
         principalType,
         principalId,
         resourceType,
         resourceId,
-        permBits: role.permBits as number,
+        role.permBits as number,
         grantedBy,
-        roleId: (role.id ?? role._id) as string,
-      });
+        undefined,
+        (role.id ?? role._id) as string,
+      );
     } catch (error) {
       logger.error(
         `[PermissionService.grantPermission] Error: ${error instanceof Error ? error.message : ''}`,
@@ -90,15 +91,15 @@ export class AccessControlService {
         throw new Error('requiredPermissions must be a positive number');
       }
       this.validateResourceType(resourceType as ResourceType);
-      const principalsList = await getUserPrincipalsBB(userId);
+      const principalsList = await getUserPrincipalsBB({ userId });
       if (principalsList.length === 0) {
         return [];
       }
-      return (await findAccessibleResourcesBB({
+      return (await findAccessibleResourcesBB(
         principalsList,
         resourceType,
-        requiredPermBit: requiredPermissions,
-      })) as string[];
+        requiredPermissions,
+      )) as string[];
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`[PermissionService.findAccessibleResources] Error: ${error.message}`);
@@ -122,7 +123,7 @@ export class AccessControlService {
         throw new Error('requiredPermissions must be a positive number');
       }
       this.validateResourceType(resourceType);
-      const entries = await findEntriesByResourceBB('__public__', resourceType);
+      const entries = await findEntriesByResourceBB(resourceType, '__public__');
       return (entries as Array<{ resourceId: string; permBits: number }>)
         .filter((e) => (e.permBits & requiredPermissions) === requiredPermissions)
         .map((e) => e.resourceId);
@@ -153,12 +154,12 @@ export class AccessControlService {
       return new Map();
     }
     try {
-      const principals = await getUserPrincipalsBB(userId);
-      const permissionsMap = (await getEffectivePermissionsForResourcesBB({
-        principalsList: principals,
+      const principals = await getUserPrincipalsBB({ userId });
+      const permissionsMap = (await getEffectivePermissionsForResourcesBB(
+        principals,
         resourceType,
         resourceIds,
-      })) as Map<string, number>;
+      )) as Map<string, number>;
       logger.debug(
         `[PermissionService.getResourcePermissionsMap] Computed permissions for ${resourceIds.length} resources, ${permissionsMap.size} have permissions`,
       );
@@ -183,7 +184,7 @@ export class AccessControlService {
       if (!resourceId || !isValidId(resourceId)) {
         throw new Error(`Invalid resource ID: ${resourceId}`);
       }
-      const entries = await findEntriesByResourceBB(resourceId, resourceType);
+      const entries = await findEntriesByResourceBB(resourceType, resourceId);
       const arr = entries as Array<{ id: string }>;
       return { deletedCount: arr.length };
     } catch (error) {
@@ -212,16 +213,16 @@ export class AccessControlService {
         throw new Error('requiredPermission must be a positive number');
       }
       this.validateResourceType(resourceType);
-      const principals = await getUserPrincipalsBB(userId);
+      const principals = await getUserPrincipalsBB({ userId });
       if (principals.length === 0) {
         return false;
       }
-      return (await hasPermissionBB({
-        principalsList: principals,
+      return (await hasPermissionBB(
+        principals,
         resourceType,
         resourceId,
-        permissionBit: requiredPermission,
-      })) as boolean;
+        requiredPermission,
+      )) as boolean;
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`[PermissionService.checkPermission] Error: ${error.message}`);

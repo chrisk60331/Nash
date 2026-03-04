@@ -11,6 +11,9 @@ creds_iv               = ""
 jwt_secret             = ""
 jwt_refresh_secret     = ""
 
-# Set after first deploy (use the App Runner URL)
+# Set after first deploy (use the App Runner URL or custom domain)
 # domain_client = "https://<id>.us-west-2.awsapprunner.com"
 # domain_server = "https://<id>.us-west-2.awsapprunner.com"
+
+# Custom domain linked in App Runner (leave empty to skip)
+# custom_domain = "nash.backboard.io"

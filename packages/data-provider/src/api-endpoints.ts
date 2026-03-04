@@ -422,3 +422,15 @@ export const getAllEffectivePermissions = (resourceType: ResourceType) =>
 // SharePoint Graph API Token
 export const graphToken = (scopes: string) =>
   `${BASE_URL}/api/auth/graph-token?scopes=${encodeURIComponent(scopes)}`;
+
+// Billing
+export const billingSubscription = () => `${BASE_URL}/api/billing/subscription`;
+export const billingCheckout = () => `${BASE_URL}/api/billing/checkout`;
+export const billingPortal = () => `${BASE_URL}/api/billing/portal`;
+
+// Admin
+export const adminUsers = (q?: string) =>
+  `${BASE_URL}/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`;
+export const adminUserSubscription = (userId: string) =>
+  `${BASE_URL}/api/admin/users/${userId}/subscription`;
+export const adminSetRole = () => `${BASE_URL}/api/admin/users/set-role`;

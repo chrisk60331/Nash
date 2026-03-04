@@ -10,6 +10,7 @@ const {
 const { PermissionTypes, Permissions } = require('librechat-data-provider');
 const { toggleUserMemories } = require('~/models');
 const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
+const requirePlan = require('~/server/middleware/requirePlan');
 const { getRoleByName } = require('~/models/Role');
 
 const router = express.Router();
@@ -43,6 +44,7 @@ const checkMemoryOptOut = generateCheckAccess({
 });
 
 router.use(requireJwtAuth);
+router.use(requirePlan('plus'));
 
 /**
  * GET /memories
@@ -149,13 +151,15 @@ router.post('/', memoryPayloadLimit, checkMemoryCreate, configMiddleware, async 
     }
 
     const updatedMemories = await getAllUserMemoriesBB(req.user.id);
-    const newMemory = updatedMemories.find((m) => m.key === key.trim());
+    const newMemory = updatedMemories.find((m) => m.key === key.trim()) ?? {
+      key: key.trim(),
+      value: value.trim(),
+      tokenCount,
+      updated_at: new Date(),
+    };
 
     res.status(201).json({ created: true, memory: newMemory });
   } catch (error) {
-    if (error.message && error.message.includes('already exists')) {
-      return res.status(409).json({ error: 'Memory with this key already exists.' });
-    }
     res.status(500).json({ error: error.message });
   }
 });

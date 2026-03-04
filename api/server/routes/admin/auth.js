@@ -242,6 +242,44 @@ router.delete('/delete-user', async (req, res) => {
 });
 
 /**
+ * Promote or demote a user by email. Protected by ADMIN_RESET_SECRET header.
+ * POST /api/admin/set-role
+ * Headers: x-admin-secret: <ADMIN_RESET_SECRET>
+ * Body: { email: string, role: "ADMIN" | "USER" }
+ */
+router.post('/set-role', async (req, res) => {
+  const secret = process.env.ADMIN_RESET_SECRET;
+  if (!secret || req.headers['x-admin-secret'] !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { email, role } = req.body;
+  if (!email || !role) {
+    return res.status(400).json({ error: 'email and role are required' });
+  }
+
+  const validRoles = ['ADMIN', 'USER'];
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ error: `role must be one of: ${validRoles.join(', ')}` });
+  }
+
+  try {
+    const { findUser, updateUser } = require('~/models');
+    const user = await findUser({ email: email.trim().toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await updateUser(user._id || user.id, { role });
+    logger.info(`[admin/set-role] Set role for ${email} to ${role}`);
+    res.json({ success: true, email, role });
+  } catch (error) {
+    logger.error('[admin/set-role] Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
  * Invalidate the in-memory auth cache so it reloads from Backboard.
  * POST /api/admin/reload-auth
  * Headers: x-admin-secret: <ADMIN_RESET_SECRET>

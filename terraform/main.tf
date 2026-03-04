@@ -23,6 +23,9 @@ locals {
     JWT_SECRET           = var.jwt_secret
     JWT_REFRESH_SECRET   = var.jwt_refresh_secret
     ADMIN_RESET_SECRET   = var.admin_reset_secret
+    SSO_SECRET           = var.sso_secret
+    STRIPE_SECRET_KEY    = var.stripe_secret_key
+    STRIPE_WEBHOOK_SECRET = var.stripe_webhook_secret
   }
 
   secrets = { for k, v in local._all_secrets : k => v if v != "" }
@@ -45,6 +48,9 @@ locals {
     var.domain_client != "" ? { DOMAIN_CLIENT = var.domain_client } : {},
     var.domain_server != "" ? { DOMAIN_SERVER = var.domain_server } : {},
     var.app_title != "" ? { APP_TITLE = var.app_title } : {},
+    var.stripe_price_id_plus != "" ? { STRIPE_PRICE_ID_PLUS = var.stripe_price_id_plus } : {},
+    var.stripe_price_id_unlimited != "" ? { STRIPE_PRICE_ID_UNLIMITED = var.stripe_price_id_unlimited } : {},
+    var.plus_included_tokens != "500000" ? { PLUS_INCLUDED_TOKENS = var.plus_included_tokens } : {},
   )
 }
 
@@ -88,4 +94,6 @@ module "apprunner" {
 
   environment_variables = local.environment_variables
   ssm_secret_arns       = module.ssm_secrets.arns
+
+  custom_domain = var.custom_domain
 }

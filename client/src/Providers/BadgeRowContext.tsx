@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useSetRecoilState } from 'recoil';
-import { Tools, Constants, LocalStorageKeys, AgentCapabilities } from 'librechat-data-provider';
+import {
+  Tools,
+  Constants,
+  LocalStorageKeys,
+  AgentCapabilities,
+} from 'librechat-data-provider';
 import type { TAgentsEndpoint } from 'librechat-data-provider';
 import {
   useMCPServerManager,
@@ -17,6 +22,7 @@ interface BadgeRowContextType {
   conversationId?: string | null;
   storageContextKey?: string;
   agentsConfig?: TAgentsEndpoint | null;
+  memory: ReturnType<typeof useToolToggle>;
   webSearch: ReturnType<typeof useToolToggle>;
   artifacts: ReturnType<typeof useToolToggle>;
   fileSearch: ReturnType<typeof useToolToggle>;
@@ -104,11 +110,13 @@ export default function BadgeRowProvider({
       const webSearchToggleKey = `${LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_}${storageSuffix}`;
       const fileSearchToggleKey = `${LocalStorageKeys.LAST_FILE_SEARCH_TOGGLE_}${storageSuffix}`;
       const artifactsToggleKey = `${LocalStorageKeys.LAST_ARTIFACTS_TOGGLE_}${storageSuffix}`;
+      const memoryToggleKey = `${LocalStorageKeys.LAST_MEMORY_TOGGLE_}${storageSuffix}`;
 
       const codeToggleValue = getTimestampedValue(codeToggleKey);
       const webSearchToggleValue = getTimestampedValue(webSearchToggleKey);
       const fileSearchToggleValue = getTimestampedValue(fileSearchToggleKey);
       const artifactsToggleValue = getTimestampedValue(artifactsToggleKey);
+      const memoryToggleValue = getTimestampedValue(memoryToggleKey);
 
       const initialValues: Record<string, any> = {};
 
@@ -141,6 +149,14 @@ export default function BadgeRowProvider({
           initialValues[AgentCapabilities.artifacts] = JSON.parse(artifactsToggleValue);
         } catch (e) {
           console.error('Failed to parse artifacts toggle value:', e);
+        }
+      }
+
+      if (memoryToggleValue !== null) {
+        try {
+          initialValues[Tools.memory] = JSON.parse(memoryToggleValue);
+        } catch (e) {
+          console.error('Failed to parse memory toggle value:', e);
         }
       }
 
@@ -208,20 +224,15 @@ export default function BadgeRowProvider({
     },
   });
 
-  /** WebSearch hooks */
+  /** WebSearch hooks — Backboard handles search natively, no API keys needed */
   const searchApiKeyForm = useSearchApiKeyForm({});
-  const { setIsDialogOpen: setWebSearchDialogOpen } = searchApiKeyForm;
 
   const webSearch = useToolToggle({
     conversationId,
     storageContextKey,
     toolKey: Tools.web_search,
     localStorageKey: LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_,
-    setIsDialogOpen: setWebSearchDialogOpen,
-    authConfig: {
-      toolId: Tools.web_search,
-      queryOptions: { retry: 1 },
-    },
+    isAuthenticated: true,
   });
 
   /** FileSearch hook */
@@ -242,9 +253,19 @@ export default function BadgeRowProvider({
     isAuthenticated: true,
   });
 
+  /** Memory hook — three-state toggle: 'Auto' (default), 'On', 'Off' */
+  const memory = useToolToggle({
+    conversationId,
+    storageContextKey,
+    toolKey: Tools.memory,
+    localStorageKey: LocalStorageKeys.LAST_MEMORY_TOGGLE_,
+    isAuthenticated: true,
+  });
+
   const mcpServerManager = useMCPServerManager({ conversationId, storageContextKey });
 
   const value: BadgeRowContextType = {
+    memory,
     webSearch,
     artifacts,
     fileSearch,

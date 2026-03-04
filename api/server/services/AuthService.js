@@ -371,9 +371,10 @@ const resetPassword = async (userId, token, password) => {
  * @param {String | ObjectId} userId
  * @param {ServerResponse} res
  * @param {ISession | null} [session=null]
+ * @param {string | null} [existingRefreshToken=null] - Reuse this token instead of generating a new one
  * @returns
  */
-const setAuthTokens = async (userId, res, _session = null) => {
+const setAuthTokens = async (userId, res, _session = null, existingRefreshToken = null) => {
   try {
     let session = _session;
     let refreshToken;
@@ -382,7 +383,7 @@ const setAuthTokens = async (userId, res, _session = null) => {
 
     if (session && session._id && session.expiration != null) {
       refreshTokenExpires = session.expiration.getTime();
-      refreshToken = await generateRefreshToken(session);
+      refreshToken = existingRefreshToken;
     } else {
       const result = await createSession(userId, { expiresIn });
       session = result.session;

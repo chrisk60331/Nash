@@ -25,6 +25,7 @@ import {
 import usePersonalizationAccess from '~/hooks/usePersonalizationAccess';
 import { useLocalize, TranslationKeys } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
+import PlanGate from './PlanGate';
 import { cn } from '~/utils';
 
 export default function Settings({ open, onOpenChange }: TDialogProps) {
@@ -227,21 +228,29 @@ export default function Settings({ open, onOpenChange }: TDialogProps) {
                       <Chat />
                     </Tabs.Content>
                     <Tabs.Content value={SettingsTabValues.COMMANDS} tabIndex={-1}>
-                      <Commands />
+                      <PlanGate requiredPlan="plus" featureName="Commands">
+                        <Commands />
+                      </PlanGate>
                     </Tabs.Content>
                     <Tabs.Content value={SettingsTabValues.SPEECH} tabIndex={-1}>
-                      <Speech />
+                      <PlanGate requiredPlan="plus" featureName="Speech">
+                        <Speech />
+                      </PlanGate>
                     </Tabs.Content>
                     {hasAnyPersonalizationFeature && (
                       <Tabs.Content value={SettingsTabValues.PERSONALIZATION} tabIndex={-1}>
-                        <Personalization
-                          hasMemoryOptOut={hasMemoryOptOut}
-                          hasAnyPersonalizationFeature={hasAnyPersonalizationFeature}
-                        />
+                        <PlanGate requiredPlan="plus" featureName="Memory & Personalization">
+                          <Personalization
+                            hasMemoryOptOut={hasMemoryOptOut}
+                            hasAnyPersonalizationFeature={hasAnyPersonalizationFeature}
+                          />
+                        </PlanGate>
                       </Tabs.Content>
                     )}
                     <Tabs.Content value={SettingsTabValues.DATA} tabIndex={-1}>
-                      <Data />
+                      <PlanGate requiredPlan="plus" featureName="Data Controls">
+                        <Data />
+                      </PlanGate>
                     </Tabs.Content>
                     {startupConfig?.balance?.enabled && (
                       <Tabs.Content value={SettingsTabValues.BALANCE} tabIndex={-1}>

@@ -2,6 +2,7 @@ const accessPermissions = require('./accessPermissions');
 const assistants = require('./assistants');
 const categories = require('./categories');
 const adminAuth = require('./admin/auth');
+const adminUsers = require('./admin/users');
 const endpoints = require('./endpoints');
 const staticRoute = require('./static');
 const messages = require('./messages');
@@ -26,6 +27,8 @@ const tags = require('./tags');
 const auth = require('./auth');
 const keys = require('./keys');
 const user = require('./user');
+const billing = require('./billing');
+const billingWebhook = require('./billingWebhook');
 const backboard = require('./backboard');
 const mcp = require('./mcp');
 
@@ -33,6 +36,7 @@ module.exports = {
   mcp,
   auth,
   adminAuth,
+  adminUsers,
   keys,
   apiKeys,
   user,
@@ -58,6 +62,8 @@ module.exports = {
   assistants,
   categories,
   staticRoute,
+  billing,
+  billingWebhook,
   backboard,
   accessPermissions,
 };

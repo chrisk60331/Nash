@@ -66,6 +66,11 @@ export enum QueryKeys {
   agentApiKeys = 'agentApiKeys',
   /* Folders */
   folders = 'folders',
+  /* Billing */
+  billingSubscription = 'billingSubscription',
+  /* Admin */
+  adminUsers = 'adminUsers',
+  adminUserSubscription = 'adminUserSubscription',
 }
 
 // Dynamic query keys that require parameters

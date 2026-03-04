@@ -78,6 +78,20 @@ export default function ApiKeyDialog({
         },
       },
     },
+    {
+      key: SearchProviders.ZAI,
+      label: localize('com_ui_web_search_provider_zai'),
+      inputs: {
+        zaiApiKey: {
+          placeholder: localize('com_ui_enter_api_key'),
+          type: 'password' as const,
+          link: {
+            url: 'https://chat.z.ai/',
+            text: localize('com_ui_web_search_provider_zai_key'),
+          },
+        },
+      },
+    },
   ];
 
   const rerankerOptions: DropdownOption[] = [

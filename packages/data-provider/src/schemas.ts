@@ -742,7 +742,7 @@ export const tConversationSchema = z.object({
   context: z.string().nullable().optional(),
   examples: z.array(tExampleSchema).optional(),
   /* DB */
-  folderId: z.string().optional(),
+  folderId: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),

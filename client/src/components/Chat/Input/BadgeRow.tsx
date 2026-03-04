@@ -20,6 +20,7 @@ import ToolDialogs from './ToolDialogs';
 import FileSearch from './FileSearch';
 import Artifacts from './Artifacts';
 import MCPSelect from './MCPSelect';
+import MemoryToggle from './MemoryToggle';
 import WebSearch from './WebSearch';
 import store from '~/store';
 
@@ -368,9 +369,10 @@ function BadgeRow({
             />
           </div>
         )}
+        <WebSearch />
+        <MemoryToggle />
         {showEphemeralBadges === true && (
           <>
-            <WebSearch />
             <CodeInterpreter />
             <FileSearch />
             <Artifacts />

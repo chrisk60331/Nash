@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
 import { Blocks, MCPIcon, AttachmentIcon } from '@librechat/client';
-import { Database, Bookmark, Settings2, ArrowRightToLine, MessageSquareQuote } from 'lucide-react';
+import { Database, Bookmark, ArrowRightToLine, MessageSquareQuote } from 'lucide-react';
 import {
   Permissions,
   EModelEndpoint,
   PermissionTypes,
-  isParamEndpoint,
   isAgentsEndpoint,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
@@ -16,9 +15,8 @@ import AgentPanelSwitch from '~/components/SidePanel/Agents/AgentPanelSwitch';
 import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';
 import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
 import PromptsAccordion from '~/components/Prompts/PromptsAccordion';
-import Parameters from '~/components/SidePanel/Parameters/Panel';
-import { MemoryPanel } from '~/components/SidePanel/Memories';
-import FilesPanel from '~/components/SidePanel/Files/Panel';
+import MemoryPanelGated from '~/components/SidePanel/Memories/MemoryPanelGated';
+import FilesPanelGated from '~/components/SidePanel/Files/FilesPanelGated';
 import { useHasAccess, useMCPServerManager } from '~/hooks';
 
 export default function useSideNavLinks({
@@ -122,22 +120,7 @@ export default function useSideNavLinks({
         label: '',
         icon: Database,
         id: 'memories',
-        Component: MemoryPanel,
-      });
-    }
-
-    if (
-      interfaceConfig.parameters === true &&
-      isParamEndpoint(endpoint ?? '', endpointType ?? '') === true &&
-      !isAgentsEndpoint(endpoint) &&
-      keyProvided
-    ) {
-      links.push({
-        title: 'com_sidepanel_parameters',
-        label: '',
-        icon: Settings2,
-        id: 'parameters',
-        Component: Parameters,
+        Component: MemoryPanelGated,
       });
     }
 
@@ -146,7 +129,7 @@ export default function useSideNavLinks({
       label: '',
       icon: AttachmentIcon,
       id: 'files',
-      Component: FilesPanel,
+      Component: FilesPanelGated,
     });
 
     if (hasAccessToBookmarks) {
@@ -190,8 +173,6 @@ export default function useSideNavLinks({
     hasAccessToPrompts,
     hasAccessToMemories,
     hasAccessToReadMemories,
-    interfaceConfig.parameters,
-    endpointType,
     hasAccessToBookmarks,
     availableMCPServers,
     hasAccessToUseMCPSettings,

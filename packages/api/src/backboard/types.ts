@@ -112,13 +112,33 @@ export interface BackboardStreamEvent {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+  memory_operation_id?: string;
+  retrieved_memories?: BackboardMemory[];
+}
+
+export interface BackboardMemoryOperationStatus {
+  operation_id: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+  events?: Array<{ type: string; content?: string }>;
 }
 
 /** OpenAI-compatible types for the proxy layer */
 
+export interface OpenAITextContentPart {
+  type: 'text';
+  text: string;
+}
+
+export interface OpenAIImageUrlContentPart {
+  type: 'image_url';
+  image_url: { url: string };
+}
+
+export type OpenAIContentPart = OpenAITextContentPart | OpenAIImageUrlContentPart;
+
 export interface OpenAIChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  content: string | OpenAIContentPart[] | null;
   name?: string;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;

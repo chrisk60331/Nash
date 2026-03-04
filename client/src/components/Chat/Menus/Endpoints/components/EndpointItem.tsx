@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { VisuallyHidden } from '@ariakit/react';
 import { Spinner, TooltipAnchor } from '@librechat/client';
-import { CheckCircle2, MousePointerClick, SettingsIcon } from 'lucide-react';
+import { CheckCircle2, Lock, MousePointerClick, SettingsIcon } from 'lucide-react';
 import { EModelEndpoint, isAgentsEndpoint, isAssistantsEndpoint } from 'librechat-data-provider';
 import type { TModelSpec } from 'librechat-data-provider';
 import type { Endpoint } from '~/common';
@@ -168,6 +168,13 @@ export function EndpointItem({ endpoint, endpointIndex }: EndpointItemProps) {
   const isAssistantsNotLoaded =
     isAssistantsEndpoint(endpoint.value) && endpoint.models === undefined;
 
+  const isAllPremium = useMemo(() => {
+    if (!endpoint.models?.length) {
+      return false;
+    }
+    return endpoint.models.every((m) => m.isPremium);
+  }, [endpoint.models]);
+
   const renderIconLabel = () => (
     <div className="flex min-w-0 items-center gap-2">
       {endpoint.icon && (
@@ -175,7 +182,8 @@ export function EndpointItem({ endpoint, endpointIndex }: EndpointItemProps) {
           {endpoint.icon}
         </div>
       )}
-      <span className="truncate text-left">{endpoint.label}</span>
+      <span className={cn('truncate text-left', isAllPremium && 'opacity-50')}>{endpoint.label}</span>
+      {isAllPremium && <Lock className="size-3 shrink-0 text-text-secondary opacity-60" aria-hidden="true" />}
     </div>
   );
 

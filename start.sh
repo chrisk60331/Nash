@@ -1,32 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== Nash — Starting ==="
+cd "$(dirname "$0")"
 
-# Clear built-in provider keys that may leak from shell env
-unset OPENAI_API_KEY ANTHROPIC_API_KEY GOOGLE_KEY ASSISTANTS_API_KEY AZURE_API_KEY
+unset OPENAI_API_KEY
+echo "=== Stopping any existing servers on :3080 and :3090 ==="
+lsof -ti:3080 | xargs kill -15 2>/dev/null || true
+lsof -ti:3090 | xargs kill -15 2>/dev/null || true
+sleep 3
 
-# Install deps & build packages (skips if lockfile unchanged)
-echo "→ Installing dependencies & building packages..."
-npm run smart-reinstall
+echo "=== Clearing Turborepo cache ==="
+rm -rf .turbo node_modules/.cache/turbo /tmp/backboard-uploads
 
-# Start backend (serves built frontend from client/dist/)
-echo "→ Starting backend on http://localhost:3080/"
-npm run backend:dev &
-BACKEND_PID=$!
+echo "=== Building all packages (clean) ==="
+npm run build
 
-# Start frontend dev server with HMR
-echo "→ Starting frontend dev server on http://localhost:3090/"
+echo "=== Starting backend (port 3080) ==="
+npm run backend &
+BE_PID=$!
+
+sleep 5
+
+echo "=== Starting frontend dev server (port 3090) ==="
 npm run frontend:dev &
-FRONTEND_PID=$!
-
-cleanup() {
-  echo ""
-  echo "→ Shutting down..."
-  kill "$FRONTEND_PID" "$BACKEND_PID" 2>/dev/null || true
-  wait "$FRONTEND_PID" "$BACKEND_PID" 2>/dev/null || true
-  echo "=== Nash — Stopped ==="
-}
-trap cleanup EXIT INT TERM
+FE_PID=$!
+echo "=== Backend PID: $BE_PID | Frontend PID: $FE_PID ==="
+echo "=== Backend: http://localhost:3080  |  Frontend: http://localhost:3090 ==="
 
 wait

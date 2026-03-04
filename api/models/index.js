@@ -42,6 +42,7 @@ const {
   createFileBB,
   updateFileBB,
   updateFileUsageBB,
+  updateFilesUsageBB,
   deleteFileBB,
   deleteFilesBB,
   deleteFileByFilterBB,
@@ -63,6 +64,7 @@ const {
   createMemoryBB,
   setMemoryBB,
   deleteMemoryBB,
+  getFormattedMemoriesBB,
   // Agent Categories
   getActiveCategoriesBB,
   getCategoriesWithCountsBB,
@@ -200,6 +202,7 @@ module.exports = {
   createFile: createFileBB,
   updateFile: updateFileBB,
   updateFileUsage: updateFileUsageBB,
+  updateFilesUsage: updateFilesUsageBB,
   deleteFile: deleteFileBB,
   deleteFiles: deleteFilesBB,
   deleteFileByFilter: deleteFileByFilterBB,
@@ -224,7 +227,8 @@ module.exports = {
   createMemory: createMemoryBB,
   setMemory: setMemoryBB,
   deleteMemory: deleteMemoryBB,
-  getFormattedMemories: async () => '',
+  getFormattedMemories: async ({ userId }) =>
+    getFormattedMemoriesBB(typeof userId === 'string' ? userId : userId.toString()),
 
   // Agent Category methods
   getActiveCategories: getActiveCategoriesBB,

@@ -99,3 +99,9 @@ variable "ssm_secret_arns" {
   description = "Map of secret-name => SSM parameter ARN for runtime secrets."
   default     = {}
 }
+
+variable "custom_domain" {
+  type        = string
+  description = "Custom domain to associate with the App Runner service (e.g. nash.backboard.io). Leave empty to skip."
+  default     = ""
+}

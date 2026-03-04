@@ -71,7 +71,7 @@ const addTitle = async (req, { text, response, client }) => {
         conversationId: response.conversationId,
         title,
       },
-      { context: 'api/server/services/Endpoints/agents/title.js', noUpsert: true },
+      { context: 'api/server/services/Endpoints/agents/title.js', noUpsert: true, immediate: true },
     );
   } catch (error) {
     logger.error('Error generating title:', error);

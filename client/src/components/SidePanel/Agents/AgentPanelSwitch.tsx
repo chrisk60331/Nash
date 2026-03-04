@@ -1,16 +1,21 @@
 import { useEffect } from 'react';
 import { AgentPanelProvider, useAgentPanelContext } from '~/Providers/AgentPanelContext';
 import { Panel, isEphemeralAgent } from '~/common';
+import PlanGate from '~/components/Nav/PlanGate';
 import VersionPanel from './Version/VersionPanel';
 import { useChatContext } from '~/Providers';
 import ActionsPanel from './ActionsPanel';
+import { useLocalize } from '~/hooks';
 import AgentPanel from './AgentPanel';
 
 export default function AgentPanelSwitch() {
+  const localize = useLocalize();
   return (
-    <AgentPanelProvider>
-      <AgentPanelSwitchWithContext />
-    </AgentPanelProvider>
+    <PlanGate requiredPlan="plus" featureName={localize('com_sidepanel_agent_builder')}>
+      <AgentPanelProvider>
+        <AgentPanelSwitchWithContext />
+      </AgentPanelProvider>
+    </PlanGate>
   );
 }
 

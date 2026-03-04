@@ -12,6 +12,7 @@ export type SearchApiKeyFormData = {
   serperApiKey: string;
   searxngInstanceUrl: string;
   searxngApiKey: string;
+  zaiApiKey: string;
   firecrawlApiKey: string;
   firecrawlApiUrl: string;
   jinaApiKey: string;
@@ -52,6 +53,7 @@ const useAuthSearchTool = (options?: { isEntityTool: boolean }) => {
         serperApiKey: data.serperApiKey,
         searxngInstanceUrl: data.searxngInstanceUrl,
         searxngApiKey: data.searxngApiKey,
+        zaiApiKey: data.zaiApiKey,
         firecrawlApiKey: data.firecrawlApiKey,
         firecrawlApiUrl: data.firecrawlApiUrl,
         jinaApiKey: data.jinaApiKey,

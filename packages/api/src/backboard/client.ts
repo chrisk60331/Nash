@@ -1,3 +1,4 @@
+import { logger } from '@librechat/data-schemas';
 import type {
   BackboardAssistant,
   BackboardThread,
@@ -5,6 +6,7 @@ import type {
   BackboardMemory,
   BackboardMemoriesListResponse,
   BackboardStreamEvent,
+  BackboardMemoryOperationStatus,
 } from './types';
 
 const DEFAULT_BASE_URL = 'https://app.backboard.io/api';
@@ -87,6 +89,7 @@ export class BackboardClient {
       llmProvider?: string;
       modelName?: string;
       memory?: string;
+      webSearch?: string;
     },
   ): AsyncGenerator<BackboardStreamEvent> {
     const url = new URL(`${this.baseUrl}/threads/${threadId}/messages`);
@@ -102,6 +105,9 @@ export class BackboardClient {
     }
     if (options?.memory) {
       formData.append('memory', options.memory);
+    }
+    if (options?.webSearch) {
+      formData.append('web_search', options.webSearch);
     }
 
     const controller = new AbortController();
@@ -180,8 +186,13 @@ export class BackboardClient {
     return this.request<BackboardAssistant>('GET', `/assistants/${assistantId}`);
   }
 
-  async deleteAssistant(assistantId: string): Promise<Record<string, unknown>> {
-    return this.request<Record<string, unknown>>('DELETE', `/assistants/${assistantId}`);
+  /**
+   * @deprecated Assistants must never be deleted — they hold threads, documents, and memories.
+   * This method is intentionally a no-op to prevent accidental data loss.
+   */
+  async deleteAssistant(_assistantId: string): Promise<Record<string, unknown>> {
+    logger.warn('[BackboardClient] deleteAssistant called but is a no-op — assistants must never be deleted');
+    return {};
   }
 
   async createThread(assistantId: string): Promise<BackboardThread> {
@@ -291,5 +302,56 @@ export class BackboardClient {
 
   async deleteDocument(documentId: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>('DELETE', `/documents/${documentId}`);
+  }
+
+  async getDocumentStatus(documentId: string): Promise<BackboardDocument> {
+    return this.request<BackboardDocument>('GET', `/documents/${documentId}/status`);
+  }
+
+  async waitForDocumentIndexed(
+    documentId: string,
+    timeoutMs = 120_000,
+    pollIntervalMs = 2_000,
+  ): Promise<BackboardDocument> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const doc = await this.getDocumentStatus(documentId);
+      if (doc.status === 'indexed') {
+        return doc;
+      }
+      if (doc.status === 'failed') {
+        throw new Error(`Document indexing failed: ${doc.status_message ?? 'unknown error'}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+    throw new Error(`Document indexing timed out after ${timeoutMs / 1000}s`);
+  }
+
+  async getMemoryOperationStatus(operationId: string): Promise<BackboardMemoryOperationStatus> {
+    return this.request<BackboardMemoryOperationStatus>(
+      'GET',
+      `/assistants/memories/operations/${operationId}`,
+    );
+  }
+
+  /** Polls until the memory operation reaches COMPLETED or FAILED, or timeout. */
+  async waitForMemoryOperation(
+    operationId: string,
+    timeoutMs = 30_000,
+    pollIntervalMs = 1_000,
+  ): Promise<BackboardMemoryOperationStatus | null> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const status = await this.getMemoryOperationStatus(operationId);
+        if (status.status === 'COMPLETED' || status.status === 'FAILED') {
+          return status;
+        }
+      } catch {
+        /* transient errors are retried */
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+    return null;
   }
 }

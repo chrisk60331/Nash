@@ -10,6 +10,18 @@ import { backboardStorage } from './storage';
 
 const AGENT_TYPE = 'librechat_agent';
 
+const DEFAULT_MODEL = 'openai/gpt-4o';
+
+function ensureModelString(
+  agent: Record<string, unknown>,
+  fallback: string = DEFAULT_MODEL,
+): string {
+  const model =
+    (agent.model as string | null | undefined) ??
+    ((agent.model_parameters as Record<string, unknown>)?.model as string | null | undefined);
+  return typeof model === 'string' && model.trim().length > 0 ? model : fallback;
+}
+
 interface LoadAgentParams {
   req: Record<string, unknown>;
   spec?: string;
@@ -22,9 +34,12 @@ function parseAgent(item: { id: string; content: string; metadata: Record<string
   try {
     const agent = JSON.parse(item.content) as Record<string, unknown>;
     agent._bbId = item.id;
+    agent._id = (agent.id as string) ?? (agent.agent_id as string) ?? item.id;
     return agent;
   } catch {
-    return { _bbId: item.id, ...item.metadata };
+    const fallback: Record<string, unknown> = { _bbId: item.id, ...item.metadata };
+    fallback._id = (fallback.id as string) ?? (fallback.agent_id as string) ?? item.id;
+    return fallback;
   }
 }
 
@@ -102,6 +117,13 @@ export async function loadAgentBB(
   }
   const versions = agent.versions as unknown[] | undefined;
   agent.version = versions ? versions.length : 0;
+  const model = ensureModelString(agent);
+  agent.model = model;
+  const mp = (agent.model_parameters as Record<string, unknown>) ?? {};
+  if (!mp.model || typeof mp.model !== 'string') {
+    mp.model = model;
+    agent.model_parameters = mp;
+  }
   return agent;
 }
 
@@ -149,18 +171,20 @@ function loadEphemeralAgent({
     (endpointConfig?.modelDisplayLabel as string) ??
     '';
 
+  const resolvedModel = typeof model === 'string' && model.trim().length > 0 ? model : DEFAULT_MODEL;
   const ephemeralId = encodeEphemeralAgentId({
     endpoint,
-    model: (model as string) ?? '',
+    model: resolvedModel,
     sender,
   });
 
+  const mpWithModel = { ...model_parameters, model: resolvedModel };
   return {
     id: ephemeralId,
     instructions,
     provider: endpoint,
-    model_parameters,
-    model,
+    model_parameters: mpWithModel,
+    model: resolvedModel,
     tools: [],
   };
 }
@@ -187,6 +211,7 @@ export async function createAgentBB(
   });
 
   agentData._bbId = item.id;
+  agentData._id = agentId;
   return agentData;
 }
 
@@ -338,12 +363,16 @@ export async function getListAgentsByAccessBB(params: {
   const allItems = await backboardStorage.listByType(AGENT_TYPE);
   let agents = allItems.map(parseAgent);
 
-  if (params.accessibleIds && params.accessibleIds.length > 0) {
-    const idSet = new Set(params.accessibleIds);
-    agents = agents.filter((a) => {
-      const aid = (a._id as string) ?? (a.id as string);
-      return idSet.has(aid);
-    });
+  if (params.accessibleIds != null) {
+    if (params.accessibleIds.length === 0) {
+      agents = [];
+    } else {
+      const idSet = new Set(params.accessibleIds);
+      agents = agents.filter((a) => {
+        const aid = (a._id as string) ?? (a.id as string);
+        return idSet.has(aid);
+      });
+    }
   }
 
   if (params.otherParams) {

@@ -14,6 +14,7 @@ const {
   isEnabled,
   apiNotFound,
   ErrorController,
+  flushAllPending,
   memoryDiagnostics,
   performStartupChecks,
   handleJsonParseError,
@@ -77,6 +78,11 @@ const startServer = async () => {
 
   app.get('/health', (_req, res) => res.status(200).send('OK'));
 
+  app.use('/api/backboard/v1', express.json({ limit: '50mb' }), routes.backboard);
+
+  // Stripe webhook must receive raw body before JSON parsing
+  app.use('/api/billing/webhook', routes.billingWebhook);
+
   /* Middleware */
   app.use(noIndex);
   app.use(express.json({ limit: '3mb' }));
@@ -132,6 +138,7 @@ const startServer = async () => {
   /* API Endpoints */
   app.use('/api/auth', routes.auth);
   app.use('/api/admin', routes.adminAuth);
+  app.use('/api/admin/users', routes.adminUsers);
   app.use('/api/actions', routes.actions);
   app.use('/api/keys', routes.keys);
   app.use('/api/api-keys', routes.apiKeys);
@@ -154,12 +161,12 @@ const startServer = async () => {
   app.use('/api/agents', routes.agents);
   app.use('/api/banner', routes.banner);
   app.use('/api/memories', routes.memories);
+  app.use('/api/billing', routes.billing);
   app.use('/api/permissions', routes.accessPermissions);
 
   app.use('/api/tags', routes.tags);
   app.use('/api/folders', routes.folders);
   app.use('/api/mcp', routes.mcp);
-  app.use('/api/backboard/v1', routes.backboard);
 
   /** 404 for unmatched API routes */
   app.use('/api', apiNotFound);
@@ -271,6 +278,20 @@ process.on('uncaughtException', (err) => {
 
   process.exit(1);
 });
+
+/** Flush pending Backboard writes before exit */
+const shutdown = async (signal) => {
+  logger.info(`[Server] ${signal} received, flushing pending writes...`);
+  try {
+    await flushAllPending();
+  } catch (err) {
+    logger.error('[Server] Error during shutdown flush', err);
+  }
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 /** Export app for easier testing purposes */
 module.exports = app;

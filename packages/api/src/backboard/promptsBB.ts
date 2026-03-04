@@ -134,12 +134,16 @@ export async function getListPromptGroupsByAccessBB(params: {
   const items = await backboardStorage.listByType(PROMPTGROUP_TYPE);
   let groups = items.map(parseItem);
 
-  if (params.accessibleIds && params.accessibleIds.length > 0) {
-    const idSet = new Set(params.accessibleIds);
-    groups = groups.filter((g) => {
-      const gid = (g._id as string) ?? (g.id as string);
-      return idSet.has(gid);
-    });
+  if (params.accessibleIds != null) {
+    if (params.accessibleIds.length === 0) {
+      groups = [];
+    } else {
+      const idSet = new Set(params.accessibleIds);
+      groups = groups.filter((g) => {
+        const gid = (g._id as string) ?? (g.id as string);
+        return idSet.has(gid);
+      });
+    }
   }
 
   if (params.otherParams) {

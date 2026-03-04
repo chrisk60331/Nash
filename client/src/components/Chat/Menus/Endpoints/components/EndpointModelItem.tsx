@@ -1,6 +1,8 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { VisuallyHidden } from '@ariakit/react';
-import { CheckCircle2, EarthIcon, Pin, PinOff } from 'lucide-react';
+import { TooltipAnchor } from '@librechat/client';
+import { CheckCircle2, EarthIcon, Lock, Pin, PinOff } from 'lucide-react';
 import { isAgentsEndpoint, isAssistantsEndpoint } from 'librechat-data-provider';
 import { useModelSelectorContext } from '../ModelSelectorContext';
 import { CustomMenuItem as MenuItem } from '../CustomMenu';
@@ -8,13 +10,17 @@ import { useFavorites, useLocalize } from '~/hooks';
 import type { Endpoint } from '~/common';
 import { cn } from '~/utils';
 
+const VIRTUALIZATION_THRESHOLD = 50;
+const ITEM_HEIGHT = 32;
+
 interface EndpointModelItemProps {
   modelId: string | null;
   endpoint: Endpoint;
   isSelected: boolean;
+  isPremium?: boolean;
 }
 
-export function EndpointModelItem({ modelId, endpoint, isSelected }: EndpointModelItemProps) {
+export function EndpointModelItem({ modelId, endpoint, isSelected, isPremium }: EndpointModelItemProps) {
   const localize = useLocalize();
   const { handleSelectModel } = useModelSelectorContext();
   const { isFavoriteModel, toggleFavoriteModel, isFavoriteAgent, toggleFavoriteAgent } =
@@ -107,6 +113,28 @@ export function EndpointModelItem({ modelId, endpoint, isSelected }: EndpointMod
     );
   };
 
+  if (isPremium) {
+    return (
+      <TooltipAnchor
+        description={localize('com_billing_upgrade_for_model')}
+        side="left"
+        render={
+          <div
+            ref={itemRef}
+            className="group flex w-full cursor-default items-center justify-between rounded-lg px-2 text-sm opacity-45"
+            aria-disabled="true"
+          >
+            <div className="flex w-full min-w-0 items-center gap-2 px-1 py-1">
+              {renderAvatar()}
+              <span className="truncate">{modelName}</span>
+            </div>
+            <Lock className="size-3.5 shrink-0 text-text-secondary" aria-hidden="true" />
+          </div>
+        }
+      />
+    );
+  }
+
   return (
     <MenuItem
       ref={itemRef}
@@ -144,9 +172,72 @@ export function EndpointModelItem({ modelId, endpoint, isSelected }: EndpointMod
   );
 }
 
+function VirtualizedModelList({
+  endpoint,
+  modelIds,
+  selectedModel,
+  indexSuffix,
+  premiumSet,
+}: {
+  endpoint: Endpoint;
+  modelIds: string[];
+  selectedModel: string | null;
+  indexSuffix: string;
+  premiumSet: Set<string>;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: modelIds.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: useCallback(() => ITEM_HEIGHT, []),
+    overscan: 15,
+  });
+
+  return (
+    <div
+      ref={parentRef}
+      className="max-h-[320px] overflow-y-auto"
+      role="presentation"
+    >
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const modelId = modelIds[virtualItem.index];
+          return (
+            <div
+              key={`${endpoint.value}${indexSuffix}-${modelId}-${virtualItem.index}`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: `${virtualItem.size}px`,
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <EndpointModelItem
+                modelId={modelId}
+                endpoint={endpoint}
+                isSelected={selectedModel === modelId}
+                isPremium={premiumSet.has(modelId)}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function renderEndpointModels(
   endpoint: Endpoint | null,
-  models: Array<{ name: string; isGlobal?: boolean }>,
+  models: Array<{ name: string; isGlobal?: boolean; isPremium?: boolean }>,
   selectedModel: string | null,
   filteredModels?: string[],
   endpointIndex?: number,
@@ -154,15 +245,33 @@ export function renderEndpointModels(
   const modelsToRender = filteredModels || models.map((model) => model.name);
   const indexSuffix = endpointIndex != null ? `-${endpointIndex}` : '';
 
-  return modelsToRender.map(
-    (modelId, modelIndex) =>
-      endpoint && (
-        <EndpointModelItem
-          key={`${endpoint.value}${indexSuffix}-${modelId}-${modelIndex}`}
-          modelId={modelId}
-          endpoint={endpoint}
-          isSelected={selectedModel === modelId}
-        />
-      ),
+  if (!endpoint) {
+    return null;
+  }
+
+  const premiumSet = new Set(
+    models.filter((m) => m.isPremium).map((m) => m.name),
   );
+
+  if (modelsToRender.length > VIRTUALIZATION_THRESHOLD) {
+    return (
+      <VirtualizedModelList
+        endpoint={endpoint}
+        modelIds={modelsToRender}
+        selectedModel={selectedModel}
+        indexSuffix={indexSuffix}
+        premiumSet={premiumSet}
+      />
+    );
+  }
+
+  return modelsToRender.map((modelId, modelIndex) => (
+    <EndpointModelItem
+      key={`${endpoint.value}${indexSuffix}-${modelId}-${modelIndex}`}
+      modelId={modelId}
+      endpoint={endpoint}
+      isSelected={selectedModel === modelId}
+      isPremium={premiumSet.has(modelId)}
+    />
+  ));
 }

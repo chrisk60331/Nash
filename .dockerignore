@@ -16,3 +16,5 @@ docs
 
 # Ignore all hidden files
 .*
+
+terraform/*

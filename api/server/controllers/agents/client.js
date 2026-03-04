@@ -1,10 +1,8 @@
 require('events').EventEmitter.defaultMaxListeners = 100;
 const { logger } = require('@librechat/data-schemas');
-const { getBufferString, HumanMessage } = require('@langchain/core/messages');
 const {
   createRun,
   Tokenizer,
-  checkAccess,
   buildToolSet,
   sanitizeTitle,
   logToolError,
@@ -15,12 +13,10 @@ const {
   getBalanceConfig,
   getProviderConfig,
   omitTitleOptions,
-  memoryInstructions,
   applyContextToAgent,
   createTokenCounter,
   GenerationJobManager,
   getTransactionsConfig,
-  createMemoryProcessor,
   createMultiAgentMapper,
   filterMalformedContentParts,
 } = require('@librechat/api');
@@ -34,22 +30,16 @@ const {
 } = require('@librechat/agents');
 const {
   Constants,
-  Permissions,
   VisionModes,
   ContentTypes,
   EModelEndpoint,
-  PermissionTypes,
   isAgentsEndpoint,
-  isEphemeralAgentId,
   removeNullishValues,
 } = require('librechat-data-provider');
 const { spendTokens, spendStructuredTokens } = require('~/models/spendTokens');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 const { createContextHandlers } = require('~/app/clients/prompts');
-const { getConvoFiles } = require('~/models/Conversation');
 const BaseClient = require('~/app/clients/BaseClient');
-const { getRoleByName } = require('~/models/Role');
-const { loadAgent } = require('~/models/Agent');
 const { getMCPManager } = require('~/config');
 const db = require('~/models');
 
@@ -100,8 +90,6 @@ class AgentClient extends BaseClient {
     this.usage;
     /** @type {Record<string, number>} */
     this.indexTokenCountMap = {};
-    /** @type {(messages: BaseMessage[]) => Promise<void>} */
-    this.processMemory;
   }
 
   /**
@@ -310,13 +298,6 @@ class AgentClient extends BaseClient {
       }
     }
 
-    /** Memory context (user preferences/memories) */
-    const withoutKeys = await this.useMemory();
-    if (withoutKeys) {
-      const memoryContext = `${memoryInstructions}\n\n# Existing memory about the user:\n${withoutKeys}`;
-      sharedRunContextParts.push(memoryContext);
-    }
-
     const sharedRunContext = sharedRunContextParts.join('\n\n');
 
     /** @type {Record<string, number> | undefined} */
@@ -367,233 +348,6 @@ class AgentClient extends BaseClient {
     );
 
     return result;
-  }
-
-  /**
-   * Creates a promise that resolves with the memory promise result or undefined after a timeout
-   * @param {Promise<(TAttachment | null)[] | undefined>} memoryPromise - The memory promise to await
-   * @param {number} timeoutMs - Timeout in milliseconds (default: 3000)
-   * @returns {Promise<(TAttachment | null)[] | undefined>}
-   */
-  async awaitMemoryWithTimeout(memoryPromise, timeoutMs = 3000) {
-    if (!memoryPromise) {
-      return;
-    }
-
-    try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Memory processing timeout')), timeoutMs),
-      );
-
-      const attachments = await Promise.race([memoryPromise, timeoutPromise]);
-      return attachments;
-    } catch (error) {
-      if (error.message === 'Memory processing timeout') {
-        logger.warn('[AgentClient] Memory processing timed out after 3 seconds');
-      } else {
-        logger.error('[AgentClient] Error processing memory:', error);
-      }
-      return;
-    }
-  }
-
-  /**
-   * @returns {Promise<string | undefined>}
-   */
-  async useMemory() {
-    const user = this.options.req.user;
-    if (user.personalization?.memories === false) {
-      return;
-    }
-    const hasAccess = await checkAccess({
-      user,
-      permissionType: PermissionTypes.MEMORIES,
-      permissions: [Permissions.USE],
-      getRoleByName,
-    });
-
-    if (!hasAccess) {
-      logger.debug(
-        `[api/server/controllers/agents/client.js #useMemory] User ${user.id} does not have USE permission for memories`,
-      );
-      return;
-    }
-    const appConfig = this.options.req.config;
-    const memoryConfig = appConfig.memory;
-    if (!memoryConfig || memoryConfig.disabled === true) {
-      return;
-    }
-
-    /** @type {Agent} */
-    let prelimAgent;
-    const allowedProviders = new Set(
-      appConfig?.endpoints?.[EModelEndpoint.agents]?.allowedProviders,
-    );
-    try {
-      if (memoryConfig.agent?.id != null && memoryConfig.agent.id !== this.options.agent.id) {
-        prelimAgent = await loadAgent({
-          req: this.options.req,
-          agent_id: memoryConfig.agent.id,
-          endpoint: EModelEndpoint.agents,
-        });
-      } else if (memoryConfig.agent?.id != null) {
-        prelimAgent = this.options.agent;
-      } else if (
-        memoryConfig.agent?.id == null &&
-        memoryConfig.agent?.model != null &&
-        memoryConfig.agent?.provider != null
-      ) {
-        prelimAgent = { id: Constants.EPHEMERAL_AGENT_ID, ...memoryConfig.agent };
-      }
-    } catch (error) {
-      logger.error(
-        '[api/server/controllers/agents/client.js #useMemory] Error loading agent for memory',
-        error,
-      );
-    }
-
-    if (!prelimAgent) {
-      return;
-    }
-
-    const agent = await initializeAgent(
-      {
-        req: this.options.req,
-        res: this.options.res,
-        agent: prelimAgent,
-        allowedProviders,
-        endpointOption: {
-          endpoint: !isEphemeralAgentId(prelimAgent.id)
-            ? EModelEndpoint.agents
-            : memoryConfig.agent?.provider,
-        },
-      },
-      {
-        getConvoFiles,
-        getFiles: db.getFiles,
-        getUserKey: db.getUserKey,
-        updateFilesUsage: db.updateFilesUsage,
-        getUserKeyValues: db.getUserKeyValues,
-        getToolFilesByIds: db.getToolFilesByIds,
-        getCodeGeneratedFiles: db.getCodeGeneratedFiles,
-      },
-    );
-
-    if (!agent) {
-      logger.warn(
-        '[api/server/controllers/agents/client.js #useMemory] No agent found for memory',
-        memoryConfig,
-      );
-      return;
-    }
-
-    const llmConfig = Object.assign(
-      {
-        provider: agent.provider,
-        model: agent.model,
-      },
-      agent.model_parameters,
-    );
-
-    /** @type {import('@librechat/api').MemoryConfig} */
-    const config = {
-      validKeys: memoryConfig.validKeys,
-      instructions: agent.instructions,
-      llmConfig,
-      tokenLimit: memoryConfig.tokenLimit,
-    };
-
-    const userId = this.options.req.user.id + '';
-    const messageId = this.responseMessageId + '';
-    const conversationId = this.conversationId + '';
-    const streamId = this.options.req?._resumableStreamId || null;
-    const [withoutKeys, processMemory] = await createMemoryProcessor({
-      userId,
-      config,
-      messageId,
-      streamId,
-      conversationId,
-      memoryMethods: {
-        setMemory: db.setMemory,
-        deleteMemory: db.deleteMemory,
-        getFormattedMemories: db.getFormattedMemories,
-      },
-      res: this.options.res,
-      user: createSafeUser(this.options.req.user),
-    });
-
-    this.processMemory = processMemory;
-    return withoutKeys;
-  }
-
-  /**
-   * Filters out image URLs from message content
-   * @param {BaseMessage} message - The message to filter
-   * @returns {BaseMessage} - A new message with image URLs removed
-   */
-  filterImageUrls(message) {
-    if (!message.content || typeof message.content === 'string') {
-      return message;
-    }
-
-    if (Array.isArray(message.content)) {
-      const filteredContent = message.content.filter(
-        (part) => part.type !== ContentTypes.IMAGE_URL,
-      );
-
-      if (filteredContent.length === 1 && filteredContent[0].type === ContentTypes.TEXT) {
-        const MessageClass = message.constructor;
-        return new MessageClass({
-          content: filteredContent[0].text,
-          additional_kwargs: message.additional_kwargs,
-        });
-      }
-
-      const MessageClass = message.constructor;
-      return new MessageClass({
-        content: filteredContent,
-        additional_kwargs: message.additional_kwargs,
-      });
-    }
-
-    return message;
-  }
-
-  /**
-   * @param {BaseMessage[]} messages
-   * @returns {Promise<void | (TAttachment | null)[]>}
-   */
-  async runMemory(messages) {
-    try {
-      if (this.processMemory == null) {
-        return;
-      }
-      const appConfig = this.options.req.config;
-      const memoryConfig = appConfig.memory;
-      const messageWindowSize = memoryConfig?.messageWindowSize ?? 5;
-
-      let messagesToProcess = [...messages];
-      if (messages.length > messageWindowSize) {
-        for (let i = messages.length - messageWindowSize; i >= 0; i--) {
-          const potentialWindow = messages.slice(i, i + messageWindowSize);
-          if (potentialWindow[0]?.role === 'user') {
-            messagesToProcess = [...potentialWindow];
-            break;
-          }
-        }
-
-        if (messagesToProcess.length === messages.length) {
-          messagesToProcess = [...messages.slice(-messageWindowSize)];
-        }
-      }
-
-      const filteredMessages = messagesToProcess.map((msg) => this.filterImageUrls(msg));
-      const bufferString = getBufferString(filteredMessages);
-      const bufferMessage = new HumanMessage(`# Current Chat:\n\n${bufferString}`);
-      return await this.processMemory([bufferMessage]);
-    } catch (error) {
-      logger.error('Memory Agent failed to process memory', error);
-    }
   }
 
   /** @type {sendCompletion} */
@@ -762,8 +516,6 @@ class AgentClient extends BaseClient {
     let config;
     /** @type {ReturnType<createRun>} */
     let run;
-    /** @type {Promise<(TAttachment | null)[] | undefined>} */
-    let memoryPromise;
     const appConfig = this.options.req.config;
     const balanceConfig = getBalanceConfig(appConfig);
     const transactionsConfig = getTransactionsConfig(appConfig);
@@ -852,8 +604,6 @@ class AgentClient extends BaseClient {
         //   messages = addCacheControl(messages);
         // }
 
-        memoryPromise = this.runMemory(messages);
-
         run = await createRun({
           agents,
           messages,
@@ -925,11 +675,6 @@ class AgentClient extends BaseClient {
       }
     } finally {
       try {
-        const attachments = await this.awaitMemoryWithTimeout(memoryPromise);
-        if (attachments && attachments.length > 0) {
-          this.artifactPromises.push(...attachments);
-        }
-
         /** Skip token spending if aborted - the abort handler (abortMiddleware.js) handles it
         This prevents double-spending when user aborts via `/api/agents/chat/abort` */
         const wasAborted = abortController?.signal?.aborted;
@@ -952,7 +697,6 @@ class AgentClient extends BaseClient {
       }
       run = null;
       config = null;
-      memoryPromise = null;
     }
   }
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Maximize2 } from 'lucide-react';
 import { Button, useToastContext } from '@librechat/client';
 import { useWatch, useForm, FormProvider } from 'react-hook-form';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
@@ -26,6 +26,7 @@ import { createProviderOption, getDefaultAgentFormValues } from '~/utils';
 import { useResourcePermissions } from '~/hooks/useResourcePermissions';
 import { useSelectAgent, useLocalize, useAuthContext } from '~/hooks';
 import { useAgentPanelContext } from '~/Providers/AgentPanelContext';
+import AgentBuilderModal from './AgentBuilderModal';
 import AgentPanelSkeleton from './AgentPanelSkeleton';
 import AdvancedPanel from './Advanced/AdvancedPanel';
 import { Panel, isEphemeralAgent } from '~/common';
@@ -252,6 +253,7 @@ export default function AgentPanel() {
     formState: { dirtyFields },
   } = methods;
   const [isAvatarUploadInFlight, setIsAvatarUploadInFlight] = useState(false);
+  const [showBuilderModal, setShowBuilderModal] = useState(false);
   const uploadAvatarMutation = useUploadAgentAvatarMutation({
     onSuccess: (updatedAgent) => {
       showToast({ message: localize('com_ui_upload_agent_avatar') });
@@ -483,6 +485,9 @@ export default function AgentPanel() {
         className="scrollbar-gutter-stable h-auto w-full flex-shrink-0 overflow-y-hidden overflow-x-visible"
         aria-label="Agent configuration form"
       >
+        <p className="mx-2 mt-2 text-sm text-text-secondary">
+          Create your own custom tool calling assistant
+        </p>
         <div className="mx-1 mt-2 flex w-full flex-wrap gap-2">
           <div className="w-full">
             <AgentSelect
@@ -540,7 +545,20 @@ export default function AgentPanel() {
           <ModelPanel models={models} providers={providers} setActivePanel={setActivePanel} />
         )}
         {canEditAgent && !agentQuery.isInitialLoading && activePanel === Panel.builder && (
-          <AgentConfig />
+          <>
+            <div className="flex justify-end px-4 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBuilderModal(true)}
+                className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+                aria-label="Open agent builder in modal"
+                title="Expand editor"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            </div>
+            <AgentConfig />
+          </>
         )}
         {canEditAgent && !agentQuery.isInitialLoading && activePanel === Panel.advanced && (
           <AdvancedPanel />
@@ -556,6 +574,10 @@ export default function AgentPanel() {
           />
         )}
       </form>
+      <AgentBuilderModal
+        isOpen={showBuilderModal}
+        onClose={() => setShowBuilderModal(false)}
+      />
     </FormProvider>
   );
 }

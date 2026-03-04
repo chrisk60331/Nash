@@ -146,6 +146,14 @@ const AuthContextProvider = ({
       console.log('Test mode. Skipping silent refresh.');
       return;
     }
+    try {
+      const ssoToken = sessionStorage.getItem('sso_token');
+      if (ssoToken) {
+        sessionStorage.removeItem('sso_token');
+        setUserContext({ token: ssoToken, isAuthenticated: true, user: undefined });
+        return;
+      }
+    } catch (e) { /* sessionStorage unavailable */ }
     refreshToken.mutate(undefined, {
       onSuccess: (data: t.TRefreshTokenResponse | undefined) => {
         const { user, token = '' } = data ?? {};

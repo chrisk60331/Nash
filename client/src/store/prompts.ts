@@ -16,7 +16,7 @@ const staticAtoms = {
 
 // Atoms with localStorage
 const localStorageAtoms = {
-  autoSendPrompts: atomWithLocalStorage('autoSendPrompts', true),
+  autoSendPrompts: atomWithLocalStorage('autoSendPrompts', false),
   alwaysMakeProd: atomWithLocalStorage('alwaysMakeProd', true),
   // Editor mode
   promptsEditorMode: atomWithLocalStorage<PromptsEditorMode>(

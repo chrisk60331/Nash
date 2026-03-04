@@ -813,6 +813,12 @@ export type TStartupConfig = {
   >;
   mcpPlaceholder?: string;
   conversationImportMaxFileSize?: number;
+  billing?: {
+    enabled: boolean;
+    freeModels?: string[];
+    priceIdPlus?: string;
+    priceIdUnlimited?: string;
+  };
 };
 
 export enum OCRStrategy {
@@ -832,6 +838,7 @@ export enum SearchCategories {
 export enum SearchProviders {
   SERPER = 'serper',
   SEARXNG = 'searxng',
+  ZAI = 'zai',
 }
 
 export enum ScraperProviders {
@@ -854,6 +861,7 @@ export const webSearchSchema = z.object({
   serperApiKey: z.string().optional().default('${SERPER_API_KEY}'),
   searxngInstanceUrl: z.string().optional().default('${SEARXNG_INSTANCE_URL}'),
   searxngApiKey: z.string().optional().default('${SEARXNG_API_KEY}'),
+  zaiApiKey: z.string().optional().default('${Z_API_KEY}'),
   firecrawlApiKey: z.string().optional().default('${FIRECRAWL_API_KEY}'),
   firecrawlApiUrl: z.string().optional().default('${FIRECRAWL_API_URL}'),
   firecrawlVersion: z.string().optional().default('${FIRECRAWL_VERSION}'),
@@ -1730,7 +1738,7 @@ export enum TTSProviders {
 /** Enum for app-wide constants */
 export enum Constants {
   /** Key for the app's version. */
-  VERSION = 'v0.8.3-rc1',
+  VERSION = 'v1.1.0',
   /** Key for the Custom Config's version (librechat.yaml). */
   CONFIG_VERSION = '1.3.4',
   /** Standard value for the first message's `parentMessageId` value, to indicate no parent exists. */
@@ -1827,6 +1835,8 @@ export enum LocalStorageKeys {
   LAST_FILE_SEARCH_TOGGLE_ = 'LAST_FILE_SEARCH_TOGGLE_',
   /** Last checked toggle for Artifacts per conversation ID */
   LAST_ARTIFACTS_TOGGLE_ = 'LAST_ARTIFACTS_TOGGLE_',
+  /** Last checked toggle for Memory per conversation ID */
+  LAST_MEMORY_TOGGLE_ = 'LAST_MEMORY_TOGGLE_',
   /** Key for the last selected agent provider */
   LAST_AGENT_PROVIDER = 'lastAgentProvider',
   /** Key for the last selected agent model */

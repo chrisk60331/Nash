@@ -1,9 +1,17 @@
+import fs from 'fs';
+import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '@librechat/data-schemas';
 import { BackboardClient } from './client';
+import { getUserAssistantId } from './userStore';
+import { getSubscriptionBB } from './subscriptionBB';
+
+const PROJECT_ROOT = process.cwd();
 import type { Request, Response } from 'express';
 import type {
+  BackboardDocument,
   BackboardMemory,
+  OpenAIContentPart,
   OpenAIChatMessage,
   OpenAIChatCompletionRequest,
   OpenAIChatCompletionChunk,
@@ -11,7 +19,6 @@ import type {
 } from './types';
 
 let cachedClient: BackboardClient | null = null;
-let cachedAssistantId: string | null = null;
 
 function getClient(): BackboardClient {
   if (cachedClient) {
@@ -28,64 +35,118 @@ function getClient(): BackboardClient {
   return cachedClient;
 }
 
-async function getOrCreateAssistant(client: BackboardClient): Promise<string> {
-  if (cachedAssistantId) {
-    return cachedAssistantId;
-  }
+const THREAD_MAP_TYPE = 'thread_mapping';
 
-  const envId = process.env.BACKBOARD_ASSISTANT_ID;
-  if (envId) {
-    cachedAssistantId = envId;
-    logger.info(`[Backboard] Using assistant from env: ${envId}`);
-    return envId;
-  }
+/** In-memory cache; warm-loaded from Backboard on first miss per assistant. */
+const threadMap = new Map<string, string>();
+const loadedAssistants = new Set<string>();
 
-  const assistants = await client.listAssistants();
-  const appName = process.env.APP_TITLE ?? 'Nash';
-  const existing = assistants.find((a) => a.name === appName || a.name === 'LibreChat');
-  if (existing) {
-    cachedAssistantId = existing.assistant_id;
-    logger.info(`[Backboard] Using existing assistant: ${cachedAssistantId}`);
-    return cachedAssistantId;
-  }
-
-  const created = await client.createAssistant(
-    appName,
-    `${appName} conversational assistant powered by Backboard`,
-  );
-  cachedAssistantId = created.assistant_id;
-  logger.info(`[Backboard] Created assistant: ${cachedAssistantId}`);
-  return cachedAssistantId;
-}
-
-async function createThread(
+async function loadThreadMappings(
   client: BackboardClient,
   assistantId: string,
-): Promise<string> {
-  const thread = await client.createThread(assistantId);
-  return thread.thread_id;
+): Promise<void> {
+  if (loadedAssistants.has(assistantId)) {
+    return;
+  }
+  try {
+    const response = await client.getMemories(assistantId);
+    for (const m of response.memories) {
+      const meta = (m.metadata ?? {}) as Record<string, unknown>;
+      if (meta.type !== THREAD_MAP_TYPE) {
+        continue;
+      }
+      const cid = meta.conversationId as string | undefined;
+      const tid = meta.threadId as string | undefined;
+      if (cid && tid && !threadMap.has(cid)) {
+        threadMap.set(cid, tid);
+      }
+    }
+    loadedAssistants.add(assistantId);
+    logger.info(`[Backboard Proxy] Loaded thread mappings for assistant ${assistantId}`);
+  } catch (err) {
+    logger.warn(`[Backboard Proxy] Failed to load thread mappings: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
-function buildPromptFromMessages(messages: OpenAIChatMessage[]): string {
-  if (messages.length === 0) {
+function persistThreadMapping(
+  client: BackboardClient,
+  assistantId: string,
+  conversationId: string,
+  threadId: string,
+): void {
+  client.addMemory(assistantId, `${conversationId}→${threadId}`, {
+    type: THREAD_MAP_TYPE,
+    conversationId,
+    threadId,
+  }).catch((err: unknown) => {
+    logger.warn(`[Backboard Proxy] Failed to persist thread mapping: ${err instanceof Error ? err.message : String(err)}`);
+  });
+}
+
+async function getOrCreateThread(
+  client: BackboardClient,
+  assistantId: string,
+  conversationId?: string,
+): Promise<{ threadId: string; isNew: boolean }> {
+  await loadThreadMappings(client, assistantId);
+
+  if (conversationId) {
+    const existing = threadMap.get(conversationId);
+    if (existing) {
+      return { threadId: existing, isNew: false };
+    }
+  }
+
+  const thread = await client.createThread(assistantId);
+  const threadId = thread.thread_id;
+
+  if (conversationId) {
+    threadMap.set(conversationId, threadId);
+    persistThreadMapping(client, assistantId, conversationId, threadId);
+  }
+
+  return { threadId, isNew: true };
+}
+
+function extractTextContent(content: string | OpenAIContentPart[] | null): string {
+  if (content == null) {
     return '';
   }
-
-  if (messages.length === 1) {
-    return messages[0].content ?? '';
+  if (typeof content === 'string') {
+    return content;
   }
+  if (!Array.isArray(content)) {
+    return String(content);
+  }
+  return content
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map((p) => p.text)
+    .join('\n');
+}
 
+
+function buildFirstMessagePrompt(
+  messages: OpenAIChatMessage[],
+  identityPrefix: string,
+  folderContext: string,
+): string {
   const systemMessages = messages.filter((m) => m.role === 'system');
   const conversationMessages = messages.filter((m) => m.role !== 'system');
 
-  const parts: string[] = [];
+  const parts: string[] = [identityPrefix.trim()];
 
   if (systemMessages.length > 0) {
     const systemContent = systemMessages
-      .map((m) => m.content)
+      .map((m) => extractTextContent(m.content))
       .filter(Boolean)
       .join('\n');
-    parts.push(`[System Instructions]\n${systemContent}`);
+    if (systemContent) {
+      parts.push(`[System Instructions]\n${systemContent}`);
+    }
+  }
+
+  if (folderContext) {
+    parts.push(`[Folder Context — prior conversations in this folder]\n${folderContext}`);
   }
 
   if (conversationMessages.length > 1) {
@@ -93,7 +154,7 @@ function buildPromptFromMessages(messages: OpenAIChatMessage[]): string {
     const historyLines = history
       .map((m) => {
         const label = m.role === 'user' ? 'User' : 'Assistant';
-        return `${label}: ${m.content ?? ''}`;
+        return `${label}: ${extractTextContent(m.content)}`;
       })
       .join('\n');
     parts.push(`[Conversation History]\n${historyLines}`);
@@ -101,7 +162,7 @@ function buildPromptFromMessages(messages: OpenAIChatMessage[]): string {
 
   const lastMessage = conversationMessages[conversationMessages.length - 1];
   if (lastMessage) {
-    parts.push(`[Current Message]\n${lastMessage.content ?? ''}`);
+    parts.push(`[Current Message]\n${extractTextContent(lastMessage.content)}`);
   }
 
   return parts.join('\n\n');
@@ -178,61 +239,307 @@ function saveFolderContext(
   });
 }
 
+const DOC_INDEX_TIMEOUT_MS = 120_000;
+const DOC_POLL_INTERVAL_MS = 2_000;
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+async function uploadAndIndexDocuments(
+  res: Response,
+  client: BackboardClient,
+  threadId: string,
+  files: Array<{ filename: string; buffer: Buffer }>,
+): Promise<void> {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const completionId = `chatcmpl-bb-${uuidv4().slice(0, 12)}`;
+  const created = Math.floor(Date.now() / 1000);
+
+  const writeChunk = (content: string) => {
+    const chunk: OpenAIChatCompletionChunk = {
+      id: completionId,
+      object: 'chat.completion.chunk',
+      created,
+      model: 'system',
+      choices: [{ index: 0, delta: { content }, finish_reason: null }],
+    };
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  };
+
+  const roleChunk: OpenAIChatCompletionChunk = {
+    id: completionId,
+    object: 'chat.completion.chunk',
+    created,
+    model: 'system',
+    choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+  };
+  res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+
+  const fileNames = files.map((f) => f.filename).join(', ');
+  writeChunk(`📄 Uploading ${files.length > 1 ? `${files.length} documents` : fileNames}...\n`);
+
+  const uploadedDocs: BackboardDocument[] = [];
+  for (const file of files) {
+    try {
+      const doc = await client.uploadDocumentToThread(threadId, file.filename, file.buffer);
+      uploadedDocs.push(doc);
+      logger.info(`[Backboard Proxy] Uploaded ${file.filename} → doc ${doc.document_id}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`[Backboard Proxy] Upload failed for ${file.filename}: ${msg}`);
+      writeChunk(`\n❌ Failed to upload ${file.filename}: ${msg}\n`);
+    }
+  }
+
+  if (uploadedDocs.length === 0) {
+    writeChunk('\n⚠️ No documents were uploaded successfully. Proceeding without document context.\n\n');
+    return;
+  }
+
+  writeChunk('📊 Indexing');
+
+  const start = Date.now();
+  let spinnerIdx = 0;
+  const pending = new Set(uploadedDocs.map((d) => d.document_id));
+
+  while (pending.size > 0 && Date.now() - start < DOC_INDEX_TIMEOUT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, DOC_POLL_INTERVAL_MS));
+
+    for (const docId of [...pending]) {
+      try {
+        const status = await client.getDocumentStatus(docId);
+        if (status.status === 'indexed') {
+          pending.delete(docId);
+          logger.info(`[Backboard Proxy] Document ${docId} indexed`);
+        } else if (status.status === 'failed') {
+          pending.delete(docId);
+          logger.warn(`[Backboard Proxy] Document ${docId} failed: ${status.status_message ?? 'unknown'}`);
+        }
+      } catch {
+        /* transient errors are retried */
+      }
+    }
+
+    if (pending.size > 0) {
+      const frame = SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length];
+      writeChunk(`\r${frame} Indexing (${uploadedDocs.length - pending.size}/${uploadedDocs.length})`);
+      spinnerIdx++;
+    }
+  }
+
+  if (pending.size > 0) {
+    writeChunk(`\n⚠️ ${pending.size} document(s) still processing — answers may not include all file content.\n\n`);
+    logger.warn(`[Backboard Proxy] ${pending.size} doc(s) not indexed within timeout`);
+  } else {
+    writeChunk(`\n✅ ${uploadedDocs.length === 1 ? 'Document' : `All ${uploadedDocs.length} documents`} indexed.\n\n`);
+  }
+}
+
+async function uploadAndIndexDocumentsQuiet(
+  client: BackboardClient,
+  threadId: string,
+  files: Array<{ filename: string; buffer: Buffer }>,
+): Promise<void> {
+  const uploadedDocs: BackboardDocument[] = [];
+  for (const file of files) {
+    try {
+      const doc = await client.uploadDocumentToThread(threadId, file.filename, file.buffer);
+      uploadedDocs.push(doc);
+    } catch (err) {
+      logger.error(`[Backboard Proxy] Upload failed for ${file.filename}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (uploadedDocs.length === 0) {
+    return;
+  }
+
+  const start = Date.now();
+  const pending = new Set(uploadedDocs.map((d) => d.document_id));
+
+  while (pending.size > 0 && Date.now() - start < DOC_INDEX_TIMEOUT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, DOC_POLL_INTERVAL_MS));
+    for (const docId of [...pending]) {
+      try {
+        const status = await client.getDocumentStatus(docId);
+        if (status.status === 'indexed' || status.status === 'failed') {
+          pending.delete(docId);
+        }
+      } catch {
+        /* retry */
+      }
+    }
+  }
+
+  logger.info(`[Backboard Proxy] Non-streaming doc upload: ${uploadedDocs.length - pending.size}/${uploadedDocs.length} indexed`);
+}
+
 export async function handleChatCompletions(req: Request, res: Response): Promise<void> {
   try {
-    const body = req.body as OpenAIChatCompletionRequest;
-    const { messages, model, stream } = body;
+    const body = req.body as OpenAIChatCompletionRequest & { tools?: unknown[] };
+    const { messages, model, stream, tools } = body;
 
     if (!messages || messages.length === 0) {
       res.status(400).json({ error: { message: 'messages array is required', type: 'invalid_request_error' } });
       return;
     }
 
+    const hasWebSearchTool = Array.isArray(tools) && tools.some(
+      (t) => (t as Record<string, unknown>)?.function?.name === 'web_search'
+        || (t as Record<string, unknown>)?.type === 'web_search',
+    );
+    const webSearchHeader = req.headers['x-backboard-web-search'] as string | undefined;
+    const webSearchMode = hasWebSearchTool || webSearchHeader === 'Auto' ? 'Auto' : undefined;
+
     const resolvedModel = model ?? 'gpt-4o';
     const { provider, modelName } = parseModelSpec(resolvedModel);
     logger.info(
-      `[Backboard Proxy] model from request: "${model ?? '(none)'}" → provider: "${provider ?? '(none)'}", modelName: "${modelName}"${!model ? ' (FALLBACK to gpt-4o)' : ''}`,
+      `[Backboard Proxy] model="${model ?? '(none)'}" → provider="${provider ?? '(none)'}", model="${modelName}"${!model ? ' (FALLBACK)' : ''}${webSearchMode ? ' [web_search]' : ''}`,
     );
 
     const client = getClient();
     const overrideAssistantId = req.headers['x-backboard-assistant-id'] as string | undefined;
-    const assistantId = overrideAssistantId ?? await getOrCreateAssistant(client);
-    const threadId = await createThread(client, assistantId);
+    const userId = req.headers['x-backboard-user-id'] as string | undefined;
+    const conversationId = req.headers['x-backboard-conversation-id'] as string | undefined;
 
-    let folderContext = '';
-    if (overrideAssistantId) {
-      folderContext = await fetchFolderContext(client, overrideAssistantId);
+    if (!userId && !overrideAssistantId) {
+      logger.error('[Backboard Proxy] Rejecting request: no x-backboard-user-id header');
+      res.status(400).json({ error: 'Missing user identity — cannot route to assistant' });
+      return;
+    }
+
+    const assistantId = overrideAssistantId ?? await getUserAssistantId(userId as string);
+    const { threadId, isNew } = await getOrCreateThread(client, assistantId, conversationId);
+
+    const isFolderChat = !!overrideAssistantId;
+    const memoryHeader = req.headers['x-backboard-memory'] as string | undefined;
+    let memoryMode = 'Auto';
+    if (isFolderChat) {
+      memoryMode = 'Off';
+    } else if (userId) {
+      const sub = await getSubscriptionBB(userId);
+      if (sub.plan === 'free') {
+        memoryMode = 'Off';
+      } else if (memoryHeader && ['On', 'Off', 'Auto'].includes(memoryHeader)) {
+        memoryMode = memoryHeader;
+      }
     }
 
     const appName = process.env.APP_TITLE ?? 'Nash';
-    let prompt = buildPromptFromMessages(messages);
+    const userName = req.headers['x-backboard-user-name'] as string | undefined;
 
-    const identityPrefix = `[System] You are ${appName}, an AI assistant. Never refer to yourself as LibreChat. Your name is ${appName}.\n\n`;
-    prompt = identityPrefix + prompt;
-
-    if (folderContext) {
-      prompt = `[Folder Context — prior conversations in this folder]\n${folderContext}\n\n${prompt}`;
-      logger.info(`[Backboard Proxy] Injected ${folderContext.length} chars of folder context`);
+    let identityPrefix = `[System] You are ${appName}, an AI assistant. Never refer to yourself as LibreChat. Your name is ${appName}.`;
+    if (userName) {
+      identityPrefix += ` The user's name is ${userName}.`;
     }
 
-    const isFolderChat = !!overrideAssistantId;
-    const memoryMode = isFolderChat ? 'Off' : 'Auto';
+    const lastUserMessage = messages.filter((m) => m.role === 'user').pop();
+
+    const files: Array<{ filename: string; buffer: Buffer }> = [];
+    const filesHeader = req.headers['x-backboard-files'] as string | undefined;
+    if (filesHeader) {
+      try {
+        const fileMeta = JSON.parse(filesHeader) as Array<{ filepath: string; filename: string }>;
+        for (const meta of fileMeta) {
+          try {
+            const relativePath = meta.filepath.replace(/^\//, '');
+            const absPath = path.resolve(PROJECT_ROOT, relativePath);
+            if (fs.existsSync(absPath)) {
+              files.push({ filename: meta.filename, buffer: fs.readFileSync(absPath) });
+              logger.info(`[Backboard Proxy] Read file from disk: ${meta.filename} (${absPath})`);
+            } else {
+              logger.warn(`[Backboard Proxy] File not found on disk: ${absPath}`);
+            }
+          } catch (err) {
+            logger.warn(`[Backboard Proxy] Failed to read file ${meta.filepath}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      } catch {
+        logger.warn('[Backboard Proxy] Failed to parse x-backboard-files header');
+      }
+    }
+
+    if (files.length > 0 && stream) {
+      await uploadAndIndexDocuments(res, client, threadId, files);
+    } else if (files.length > 0) {
+      await uploadAndIndexDocumentsQuiet(client, threadId, files);
+    }
+
+    let prompt: string;
+    if (isNew) {
+      let folderContext = '';
+      if (overrideAssistantId) {
+        folderContext = await fetchFolderContext(client, overrideAssistantId);
+        if (folderContext) {
+          logger.info(`[Backboard Proxy] Injected ${folderContext.length} chars of folder context`);
+        }
+      }
+      prompt = buildFirstMessagePrompt(messages, identityPrefix, folderContext);
+    } else {
+      prompt = lastUserMessage ? extractTextContent(lastUserMessage.content) : '';
+    }
 
     const onComplete = isFolderChat
       ? (response: string) => {
-        const lastUserMsg = messages.filter((m) => m.role === 'user').pop();
-        saveFolderContext(client, overrideAssistantId, lastUserMsg?.content ?? '', response);
+        const userText = lastUserMessage ? extractTextContent(lastUserMessage.content) : '';
+        saveFolderContext(client, overrideAssistantId, userText, response);
       }
       : undefined;
 
     logger.info(
-      `[Backboard Proxy] new thread ${threadId}, assistant=${assistantId}${isFolderChat ? ' (folder override)' : ''}, memory=${memoryMode}, ${messages.length} messages, stream=${String(stream)}`,
+      `[Backboard Proxy] ${isNew ? 'new' : 'reused'} thread ${threadId}, convo=${conversationId ?? 'none'}, assistant=${assistantId}${isFolderChat ? ' (folder)' : ''}, memory=${memoryMode}, ${messages.length} msgs, stream=${String(stream)}${files.length > 0 ? `, files=${files.length}` : ''}`,
     );
 
-    if (stream) {
-      await handleStreamingResponse(res, client, threadId, prompt, modelName, provider, onComplete, memoryMode);
-    } else {
-      await handleNonStreamingResponse(res, client, threadId, prompt, resolvedModel, modelName, provider, onComplete, memoryMode);
+    const runRequest = async (tid: string, p: string, wsMode?: string) => {
+      if (stream) {
+        await handleStreamingResponse(res, client, tid, p, modelName, provider, onComplete, memoryMode, wsMode);
+      } else {
+        await handleNonStreamingResponse(res, client, tid, p, resolvedModel, modelName, provider, onComplete, memoryMode, wsMode);
+      }
+    };
+
+    try {
+      await runRequest(threadId, prompt, webSearchMode);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+
+      const isToolUseError = webSearchMode && (
+        msg.includes('tool use') || msg.includes('No endpoints found') || msg.includes('does not support tools')
+      );
+      if (isToolUseError) {
+        logger.warn(`[Backboard Proxy] Model does not support tools, retrying without web_search`);
+        try {
+          await runRequest(threadId, prompt, undefined);
+          return;
+        } catch (retryErr) {
+          const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+          if (!retryMsg.includes('context_length')) {
+            throw retryErr;
+          }
+        }
+      }
+
+      const isContextError = msg.includes('context_length') || msg.includes('reduce the length');
+      if (isContextError && !isNew) {
+        logger.warn(`[Backboard Proxy] Context length exceeded on reused thread, retrying with fresh thread`);
+        const freshThread = await client.createThread(assistantId);
+        const freshPrompt = buildFirstMessagePrompt(messages, identityPrefix, '');
+        await runRequest(freshThread.thread_id, freshPrompt, webSearchMode);
+        return;
+      }
+
+      if (msg.includes('model_not_found') || msg.includes('does not exist')) {
+        const friendly = `This model is currently unavailable. Please select a different model.`;
+        logger.warn(`[Backboard Proxy] Model not found: ${msg}`);
+        if (!res.headersSent) {
+          res.status(404).json({ error: { message: friendly, type: 'model_not_found' } });
+        }
+        return;
+      }
+
+      throw err;
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
@@ -255,26 +562,34 @@ async function handleStreamingResponse(
   provider?: string,
   onComplete?: (response: string) => void,
   memoryMode: string = 'Auto',
+  webSearchMode?: string,
 ): Promise<void> {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
+  const headersAlreadySent = res.headersSent;
+
+  if (!headersAlreadySent) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+  }
 
   const completionId = `chatcmpl-bb-${uuidv4().slice(0, 12)}`;
   const created = Math.floor(Date.now() / 1000);
 
-  const roleChunk: OpenAIChatCompletionChunk = {
-    id: completionId,
-    object: 'chat.completion.chunk',
-    created,
-    model: modelName,
-    choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
-  };
-  res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+  if (!headersAlreadySent) {
+    const roleChunk: OpenAIChatCompletionChunk = {
+      id: completionId,
+      object: 'chat.completion.chunk',
+      created,
+      model: modelName,
+      choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+    };
+    res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+  }
 
   const responseParts: string[] = [];
   let streamClosed = false;
+  let memoryOperationId: string | undefined;
 
   const closeClientStream = () => {
     if (streamClosed || res.writableEnded) {
@@ -299,6 +614,7 @@ async function handleStreamingResponse(
     llmProvider: provider,
     modelName,
     memory: memoryMode,
+    webSearch: webSearchMode,
   })) {
     if (event.type === 'content_streaming' && event.content) {
       if (idleTimer) {
@@ -316,6 +632,11 @@ async function handleStreamingResponse(
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);
       }
       idleTimer = setTimeout(closeClientStream, STREAM_IDLE_TIMEOUT_MS);
+    } else if (event.type === 'run_ended') {
+      if (event.memory_operation_id) {
+        memoryOperationId = event.memory_operation_id;
+      }
+      logger.info(`[Backboard Proxy] run_ended: memory_op=${event.memory_operation_id ?? 'none'}`);
     }
   }
 
@@ -326,6 +647,15 @@ async function handleStreamingResponse(
 
   if (onComplete) {
     onComplete(responseParts.join(''));
+  }
+
+  if (memoryOperationId) {
+    logger.info(`[Backboard Proxy] Awaiting memory operation ${memoryOperationId}...`);
+    const result = await client.waitForMemoryOperation(memoryOperationId).catch((err) => {
+      logger.warn(`[Backboard Proxy] Memory operation poll failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    });
+    logger.info(`[Backboard Proxy] Memory operation ${memoryOperationId} → ${result?.status ?? 'timeout'}`);
   }
 }
 
@@ -339,9 +669,11 @@ async function handleNonStreamingResponse(
   provider?: string,
   onComplete?: (response: string) => void,
   memoryMode: string = 'Auto',
+  webSearchMode?: string,
 ): Promise<void> {
   const contentParts: string[] = [];
   let responseSent = false;
+  let memoryOperationId: string | undefined;
 
   const sendResponse = () => {
     if (responseSent) {
@@ -372,6 +704,7 @@ async function handleNonStreamingResponse(
     llmProvider: provider,
     modelName,
     memory: memoryMode,
+    webSearch: webSearchMode,
   })) {
     if (event.type === 'content_streaming' && event.content) {
       if (idleTimer) {
@@ -379,6 +712,11 @@ async function handleNonStreamingResponse(
       }
       contentParts.push(event.content);
       idleTimer = setTimeout(sendResponse, STREAM_IDLE_TIMEOUT_MS);
+    } else if (event.type === 'run_ended') {
+      if (event.memory_operation_id) {
+        memoryOperationId = event.memory_operation_id;
+      }
+      logger.info(`[Backboard Proxy] run_ended (non-stream): memory_op=${event.memory_operation_id ?? 'none'}`);
     }
   }
 
@@ -389,6 +727,15 @@ async function handleNonStreamingResponse(
 
   if (onComplete) {
     onComplete(contentParts.join(''));
+  }
+
+  if (memoryOperationId) {
+    logger.info(`[Backboard Proxy] Awaiting memory operation ${memoryOperationId}...`);
+    const result = await client.waitForMemoryOperation(memoryOperationId).catch((err) => {
+      logger.warn(`[Backboard Proxy] Memory operation poll failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    });
+    logger.info(`[Backboard Proxy] Memory operation ${memoryOperationId} → ${result?.status ?? 'timeout'}`);
   }
 }
 
@@ -419,26 +766,38 @@ async function fetchBackboardModels(): Promise<
 
   const allModels: { id: string; object: string; created: number; owned_by: string }[] = [];
 
-  for (const provider of providers) {
-    const modelsRes = await fetch(
-      `${baseUrl}/models?provider=${encodeURIComponent(provider)}`,
-      { headers: { 'X-API-Key': apiKey } },
-    );
-    const data = (await modelsRes.json()) as {
-      models: { name: string; model_type: string; provider: string }[];
-    };
+  const PAGE_SIZE = 500;
 
-    for (const m of data.models ?? []) {
-      if (m.model_type !== 'llm') {
-        continue;
+  for (const provider of providers) {
+    let skip = 0;
+    let total = 0;
+
+    do {
+      const modelsRes = await fetch(
+        `${baseUrl}/models?provider=${encodeURIComponent(provider)}&model_type=llm&skip=${skip}&limit=${PAGE_SIZE}`,
+        { headers: { 'X-API-Key': apiKey } },
+      );
+      const data = (await modelsRes.json()) as {
+        models: { name: string; model_type: string; provider: string }[];
+        total: number;
+      };
+
+      total = data.total ?? 0;
+
+      for (const m of data.models ?? []) {
+        if (m.model_type !== 'llm') {
+          continue;
+        }
+        allModels.push({
+          id: `${m.provider}/${m.name}`,
+          object: 'model',
+          created: 1700000000,
+          owned_by: m.provider,
+        });
       }
-      allModels.push({
-        id: `${m.provider}/${m.name}`,
-        object: 'model',
-        created: 1700000000,
-        owned_by: m.provider,
-      });
-    }
+
+      skip += PAGE_SIZE;
+    } while (skip < total);
   }
 
   cachedModels = allModels;
