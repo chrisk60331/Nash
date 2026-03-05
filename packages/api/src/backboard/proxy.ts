@@ -176,6 +176,14 @@ function parseModelSpec(model: string): { provider?: string; modelName: string }
   return { modelName: model };
 }
 
+function readNonEmptyHeader(value: string | string[] | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 const FOLDER_CONTEXT_TYPE = 'folder_thread_context';
 const MAX_FOLDER_CONTEXT_CHARS = 8000;
 
@@ -387,22 +395,43 @@ export async function handleChatCompletions(req: Request, res: Response): Promis
     }
 
     const hasWebSearchTool = Array.isArray(tools) && tools.some(
-      (t) => (t as Record<string, unknown>)?.function?.name === 'web_search'
-        || (t as Record<string, unknown>)?.type === 'web_search',
+      (t) => {
+        const tool = t as Record<string, unknown>;
+        const fn = tool?.function as Record<string, unknown> | undefined;
+        return fn?.name === 'web_search' || tool?.type === 'web_search';
+      },
     );
-    const webSearchHeader = req.headers['x-backboard-web-search'] as string | undefined;
-    const webSearchMode = hasWebSearchTool || webSearchHeader === 'Auto' ? 'Auto' : undefined;
 
     const resolvedModel = model ?? 'gpt-4o';
     const { provider, modelName } = parseModelSpec(resolvedModel);
+
+    const client = getClient();
+    const rawOverrideAssistantId = req.headers['x-backboard-assistant-id'];
+    const rawUserId = req.headers['x-backboard-user-id'];
+    const rawConversationId = req.headers['x-backboard-conversation-id'];
+    const rawWebSearchHeader = req.headers['x-backboard-web-search'];
+
+    const overrideAssistantId = readNonEmptyHeader(rawOverrideAssistantId);
+    const userId = readNonEmptyHeader(rawUserId);
+    const conversationId = readNonEmptyHeader(rawConversationId) ?? undefined;
+    const webSearchHeader = readNonEmptyHeader(rawWebSearchHeader) ?? undefined;
+    const webSearchMode = hasWebSearchTool || webSearchHeader === 'Auto' ? 'Auto' : undefined;
     logger.info(
       `[Backboard Proxy] model="${model ?? '(none)'}" → provider="${provider ?? '(none)'}", model="${modelName}"${!model ? ' (FALLBACK)' : ''}${webSearchMode ? ' [web_search]' : ''}`,
     );
 
-    const client = getClient();
-    const overrideAssistantId = req.headers['x-backboard-assistant-id'] as string | undefined;
-    const userId = req.headers['x-backboard-user-id'] as string | undefined;
-    const conversationId = req.headers['x-backboard-conversation-id'] as string | undefined;
+    if (rawUserId != null && userId == null) {
+      res.status(400).json({ error: 'x-backboard-user-id must be a non-empty string' });
+      return;
+    }
+    if (rawOverrideAssistantId != null && overrideAssistantId == null) {
+      res.status(400).json({ error: 'x-backboard-assistant-id must be a non-empty string' });
+      return;
+    }
+    if (rawConversationId != null && conversationId == null) {
+      res.status(400).json({ error: 'x-backboard-conversation-id must be a non-empty string' });
+      return;
+    }
 
     if (!userId && !overrideAssistantId) {
       logger.error('[Backboard Proxy] Rejecting request: no x-backboard-user-id header');
@@ -410,7 +439,9 @@ export async function handleChatCompletions(req: Request, res: Response): Promis
       return;
     }
 
-    const assistantId = overrideAssistantId ?? await getUserAssistantId(userId as string);
+    const assistantId = overrideAssistantId
+      ? overrideAssistantId
+      : await getUserAssistantId(userId as string);
     const { threadId, isNew } = await getOrCreateThread(client, assistantId, conversationId);
 
     const isFolderChat = !!overrideAssistantId;

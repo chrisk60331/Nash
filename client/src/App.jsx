@@ -8,6 +8,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toast, ThemeProvider, ToastProvider } from '@librechat/client';
 import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
 import { ScreenshotProvider, useApiErrorBoundary } from './hooks';
+import { isAbortedError } from './utils/errors';
 import WakeLockManager from '~/components/System/WakeLockManager';
 import { getThemeFromEnv } from './utils/getThemeFromEnv';
 import { initializeFontSize } from '~/store/fontSize';
@@ -30,6 +31,9 @@ const App = () => {
     },
     queryCache: new QueryCache({
       onError: (error) => {
+        if (isAbortedError(error)) {
+          return;
+        }
         if (error?.response?.status === 401) {
           setError(error);
         }

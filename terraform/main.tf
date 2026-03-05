@@ -16,50 +16,37 @@ locals {
   service_name = "${var.app_name}-${var.environment}"
 
   _all_secrets = {
-    BACKBOARD_API_KEY    = var.backboard_api_key
+    BACKBOARD_API_KEY      = var.backboard_api_key
     BACKBOARD_ASSISTANT_ID = var.backboard_assistant_id
-    CREDS_KEY            = var.creds_key
-    CREDS_IV             = var.creds_iv
-    JWT_SECRET           = var.jwt_secret
-    JWT_REFRESH_SECRET   = var.jwt_refresh_secret
-    ADMIN_RESET_SECRET   = var.admin_reset_secret
-    SSO_SECRET           = var.sso_secret
-    STRIPE_SECRET_KEY    = var.stripe_secret_key
-    STRIPE_WEBHOOK_SECRET = var.stripe_webhook_secret
-    GOOGLE_CLIENT_ID     = var.google_client_id
-    GOOGLE_CLIENT_SECRET = var.google_client_secret
-
+    JWT_SECRET             = var.jwt_secret
+    JWT_REFRESH_SECRET     = var.jwt_refresh_secret
+    SSO_SECRET             = var.sso_secret
+    STRIPE_SECRET_KEY      = var.stripe_secret_key
+    STRIPE_WEBHOOK_SECRET  = var.stripe_webhook_secret
+    GOOGLE_CLIENT_ID       = var.google_client_id
+    GOOGLE_CLIENT_SECRET   = var.google_client_secret
   }
 
   secrets = { for k, v in local._all_secrets : k => v if v != "" }
 
   environment_variables = merge(
     {
-      HOST         = "0.0.0.0"
-      GOOGLE_CALLBACK_URL  = var.google_callback_url
-      PORT         = tostring(var.container_port)
-      NODE_ENV     = "production"
-      CONSOLE_JSON = "true"
-      ENVIRONMENT  = var.environment
-      AWS_REGION   = var.aws_region
-      ALLOW_REGISTRATION = true
-      LOGIN_WINDOW=1
-      LOGIN_MAX=50
-      ALLOW_UNVERIFIED_EMAIL_LOGIN=true
-      SESSION_EXPIRY=1209600000
-      REFRESH_TOKEN_EXPIRY=1209600000
-      ALLOW_SOCIAL_LOGIN=true
-      ALLOW_SOCIAL_REGISTRATION=true
-      STRIPE_PRICE_ID_PLUS= var.stripe_price_id_plus
-      STRIPE_PRICE_ID_UNLIMITED= var.stripe_price_id_unlimited
-      BACKBOARD_AUTH_ASSISTANT_ID=var.backboard_auth_assistant_id
+      HOST                       = "0.0.0.0"
+      PORT                       = tostring(var.container_port)
+      ENVIRONMENT                = var.environment
+      AWS_REGION                 = var.aws_region
+      GOOGLE_CALLBACK_URL        = var.google_callback_url
+      ALLOW_SOCIAL_LOGIN         = "true"
+      ALLOW_SOCIAL_REGISTRATION  = "true"
+      ALLOW_SHARED_LINKS         = "true"
+      STRIPE_PRICE_ID_PLUS       = var.stripe_price_id_plus
+      STRIPE_PRICE_ID_UNLIMITED  = var.stripe_price_id_unlimited
+      PLUS_INCLUDED_TOKENS       = var.plus_included_tokens
+      BACKBOARD_AUTH_ASSISTANT_ID = var.backboard_auth_assistant_id
     },
     var.domain_client != "" ? { DOMAIN_CLIENT = var.domain_client } : {},
     var.domain_server != "" ? { DOMAIN_SERVER = var.domain_server } : {},
     var.app_title != "" ? { APP_TITLE = var.app_title } : {},
-    var.stripe_price_id_plus != "" ? { STRIPE_PRICE_ID_PLUS = var.stripe_price_id_plus } : {},
-    var.stripe_price_id_unlimited != "" ? { STRIPE_PRICE_ID_UNLIMITED = var.stripe_price_id_unlimited } : {},
-    var.plus_included_tokens != "500000" ? { PLUS_INCLUDED_TOKENS = var.plus_included_tokens } : {},
   )
 }
 

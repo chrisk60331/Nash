@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Constants, QueryKeys } from 'librechat-data-provider';
 import { BookmarkFilledIcon, BookmarkIcon } from '@radix-ui/react-icons';
 import { DropdownPopup, TooltipAnchor, Spinner, useToastContext } from '@librechat/client';
-import type { TConversationTag } from 'librechat-data-provider';
+import type { TConversationTag, TTagConversationResponse } from 'librechat-data-provider';
 import type { FC } from 'react';
 import type * as t from '~/common';
 import { useConversationTagsQuery, useTagConversationMutation } from '~/data-provider';
@@ -26,6 +26,7 @@ const BookmarkMenu: FC = () => {
   const conversationId = conversation?.conversationId ?? '';
   const updateConvoTags = useBookmarkSuccess(conversationId);
   const tags = conversation?.tags;
+  const tagsList = Array.isArray(tags) ? tags : [];
   const isTemporary = conversation?.expiredAt != null;
 
   const menuId = useId();
@@ -33,7 +34,8 @@ const BookmarkMenu: FC = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const mutation = useTagConversationMutation(conversationId, {
-    onSuccess: (newTags: string[], vars) => {
+    onSuccess: (data: TTagConversationResponse | { tags?: string[] }, vars) => {
+      const newTags = Array.isArray(data) ? data : (data?.tags ?? []);
       updateConvoTags(newTags);
       const tagElement = document.getElementById(vars.tag);
       console.log('tagElement', tagElement);
@@ -75,18 +77,18 @@ const BookmarkMenu: FC = () => {
         return;
       }
 
-      logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags before setting', tags);
+      logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags before setting', tagsList);
 
       const allTags =
         queryClient.getQueryData<TConversationTag[]>([QueryKeys.conversationTags]) ?? [];
       const existingTags = allTags.map((t) => t.tag);
-      const filteredTags = tags?.filter((t) => existingTags.includes(t));
+      const filteredTags = tagsList.filter((t) => existingTags.includes(t));
 
       logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags after filtering', filteredTags);
       const newTags =
-        filteredTags?.includes(tag) === true
+        filteredTags.includes(tag) === true
           ? filteredTags.filter((t) => t !== tag)
-          : [...(filteredTags ?? []), tag];
+          : [...filteredTags, tag];
 
       logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags after', newTags);
       mutation.mutate({
@@ -94,12 +96,12 @@ const BookmarkMenu: FC = () => {
         tag,
       });
     },
-    [tags, conversationId, mutation, queryClient, showToast],
+    [tagsList, conversationId, mutation, queryClient, showToast],
   );
 
   const newBookmarkRef = useRef<HTMLButtonElement>(null);
 
-  const tagsCount = tags?.length ?? 0;
+  const tagsCount = tagsList.length;
   const hasBookmarks = tagsCount > 0;
 
   const buttonAriaLabel = useMemo(() => {
@@ -124,7 +126,7 @@ const BookmarkMenu: FC = () => {
 
     if (data) {
       for (const tag of data) {
-        const isSelected = tags?.includes(tag.tag) === true;
+        const isSelected = tagsList.includes(tag.tag) === true;
         items.push({
           id: tag.tag,
           label: tag.tag,
@@ -142,7 +144,7 @@ const BookmarkMenu: FC = () => {
     }
 
     return items;
-  }, [tags, data, handleSubmit, mutation.isLoading, localize]);
+  }, [tagsList, data, handleSubmit, mutation.isLoading, localize]);
 
   if (!isActiveConvo) {
     return null;
@@ -194,7 +196,7 @@ const BookmarkMenu: FC = () => {
         items={dropdownItems}
       />
       <BookmarkEditDialog
-        tags={tags}
+        tags={tagsList}
         open={isDialogOpen}
         setTags={updateConvoTags}
         setOpen={setIsDialogOpen}

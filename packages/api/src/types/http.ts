@@ -16,6 +16,9 @@ export type RequestBody = {
   model?: string;
   key?: string;
   endpointOption?: Partial<TEndpointOption>;
+  files?: Array<Record<string, unknown>>;
+  ephemeralAgent?: Record<string, unknown>;
+  folderId?: string;
 };
 
 export type ServerRequest = Request<unknown, unknown, RequestBody> & {

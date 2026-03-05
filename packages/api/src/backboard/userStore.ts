@@ -1,5 +1,6 @@
 import { logger } from '@librechat/data-schemas';
 import { backboardStorage } from './storage';
+import { AUTH_USER, getAuthCache, upsertAuthEntry } from './authStore';
 
 import type { BackboardClient } from './client';
 import type { BackboardMemory } from './types';
@@ -31,9 +32,45 @@ interface UserCache {
 const userAssistantIds = new Map<string, string>();
 const userCaches = new Map<string, UserCache>();
 const pendingFlushes = new Map<string, ReturnType<typeof setTimeout>>();
+const inFlightFlushes = new Set<string>();
+const flushMetrics = {
+  immediateSuccess: 0,
+  immediateFailure: 0,
+  backgroundSuccess: 0,
+  backgroundFailure: 0,
+};
 
 function getClient() {
   return backboardStorage.getClient();
+}
+
+function normalizeStack(stack?: string): string {
+  return (stack ?? '').split('\n').map((line) => line.trim()).filter(Boolean).join(' | ');
+}
+
+function extractCallerLabel(stack?: string): string {
+  const lines = (stack ?? '').split('\n').map((line) => line.trim());
+  const caller = lines.find((line) => line.startsWith('at ') && !line.includes('/backboard/userStore.'));
+  return caller ?? 'unknown-caller';
+}
+
+function requireUserId(value: unknown, stack?: string): string {
+  if (typeof value !== 'string') {
+    logger.error(
+      `[UserStore] Invalid user id type (${typeof value}) caller=${extractCallerLabel(stack)} stack=${normalizeStack(stack)}`,
+    );
+    throw new Error('[UserStore] Invalid user id type');
+  }
+
+  const userId = value.trim();
+  if (!userId) {
+    logger.error(
+      `[UserStore] Missing user id caller=${extractCallerLabel(stack)} stack=${normalizeStack(stack)}`,
+    );
+    throw new Error('[UserStore] Missing user id');
+  }
+
+  return userId;
 }
 
 async function safeDeleteMemory(bb: BackboardClient, assistantId: string, memoryId: string): Promise<void> {
@@ -49,6 +86,9 @@ async function safeDeleteMemory(bb: BackboardClient, assistantId: string, memory
 }
 
 function cancelPendingFlush(flushKey: string): void {
+  if (inFlightFlushes.has(flushKey)) {
+    return;
+  }
   const timer = pendingFlushes.get(flushKey);
   if (timer) {
     clearTimeout(timer);
@@ -65,10 +105,26 @@ function scheduleFlush(
   cancelPendingFlush(flushKey);
 
   const timer = setTimeout(() => {
-    pendingFlushes.delete(flushKey);
-    flushEntry(userId, entryKey, type).catch((err: unknown) => {
-      logger.warn(`[UserStore] Background flush failed for ${flushKey}: ${err instanceof Error ? err.message : String(err)}`);
-    });
+    inFlightFlushes.add(flushKey);
+    flushEntry(userId, entryKey, type)
+      .then((ok) => {
+        if (ok) {
+          flushMetrics.backgroundSuccess++;
+          return;
+        }
+        flushMetrics.backgroundFailure++;
+        logger.warn(
+          `[UserStore] Background flush unsuccessful for ${flushKey} metrics=${JSON.stringify(flushMetrics)}`,
+        );
+      })
+      .catch((err: unknown) => {
+        flushMetrics.backgroundFailure++;
+        logger.warn(`[UserStore] Background flush failed for ${flushKey}: ${err instanceof Error ? err.message : String(err)}`);
+      })
+      .finally(() => {
+        inFlightFlushes.delete(flushKey);
+        pendingFlushes.delete(flushKey);
+      });
   }, FLUSH_DELAY_MS);
 
   pendingFlushes.set(flushKey, timer);
@@ -80,7 +136,11 @@ function buildStorableContent(data: Record<string, unknown>): string {
     return raw;
   }
 
-  const trimmed = { ...data };
+  const trimmed: Record<string, unknown> = {
+    ...data,
+    _bbContentTruncated: true,
+    _bbOriginalChars: raw.length,
+  };
   if (typeof trimmed.text === 'string' && (trimmed.text as string).length > 2000) {
     trimmed.text = (trimmed.text as string).slice(0, 2000);
   }
@@ -99,16 +159,16 @@ async function flushEntry(
   userId: string,
   entryKey: string,
   type: typeof CONVO_TYPE | typeof MSG_TYPE,
-): Promise<void> {
+): Promise<boolean> {
   const cache = userCaches.get(userId);
   if (!cache) {
-    return;
+    return true;
   }
 
   const store = type === CONVO_TYPE ? cache.convos : cache.msgs;
   const entry = store.get(entryKey);
   if (!entry) {
-    return;
+    return true;
   }
 
   const bb = getClient();
@@ -140,20 +200,43 @@ async function flushEntry(
     const result = await bb.addMemory(aid, content, metadata);
     const newBbId = (result.memory_id ?? result.id ?? '') as string;
     entry.bbId = newBbId;
+    return true;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(`[UserStore] Flush ${type} ${entryKey} failed (${content.length} chars): ${msg.slice(0, 300)}`);
+    return false;
   }
 }
 
-export async function getUserAssistantId(userId: string): Promise<string> {
-  const cached = userAssistantIds.get(userId);
+export async function getUserAssistantId(userId: unknown): Promise<string> {
+  const callStack = new Error('[UserStore] getUserAssistantId call stack').stack;
+  const callerLabel = extractCallerLabel(callStack);
+  if (process.env.BACKBOARD_DEBUG_CALLSTACK === 'true') {
+    logger.info(
+      `[UserStore] getUserAssistantId caller=${callerLabel} userIdType=${typeof userId} stack=${normalizeStack(callStack)}`,
+    );
+  } else {
+    logger.info(`[UserStore] getUserAssistantId caller=${callerLabel} userIdType=${typeof userId}`);
+  }
+
+  const safeUserId = requireUserId(userId, callStack);
+  const cached = userAssistantIds.get(safeUserId);
   if (cached) {
     return cached;
   }
 
+  // Check the user's auth record for a persisted assistant ID
+  const authCache = await getAuthCache();
+  const userEntry = authCache.users.get(safeUserId);
+  const storedId = userEntry?.data.bbAssistantId as string | undefined;
+  if (storedId) {
+    userAssistantIds.set(safeUserId, storedId);
+    return storedId;
+  }
+
+  // Migration fallback: scan assistants by name (same logic as before)
   const bb = getClient();
-  const name = `librechat-user-${userId}`;
+  const name = `librechat-user-${safeUserId}`;
   const assistants = await bb.listAssistants();
   const matches = assistants.filter((a) => a.name === name);
 
@@ -164,18 +247,25 @@ export async function getUserAssistantId(userId: string): Promise<string> {
       return tb.localeCompare(ta);
     });
     const latest = matches[0];
-    userAssistantIds.set(userId, latest.assistant_id);
-    if (matches.length > 1) {
-      logger.warn(
-        `[UserStore] User ${userId} has ${matches.length} assistants — using latest ${latest.assistant_id}`,
-      );
+    userAssistantIds.set(safeUserId, latest.assistant_id);
+
+    try {
+      await upsertAuthEntry(AUTH_USER, safeUserId, { bbAssistantId: latest.assistant_id });
+      logger.info(`[UserStore] Migrated user ${safeUserId} → assistant ${latest.assistant_id}`);
+    } catch (err: unknown) {
+      logger.warn(`[UserStore] Migration persist failed for ${safeUserId} (will retry next cold start): ${err instanceof Error ? err.message : String(err)}`);
     }
     return latest.assistant_id;
   }
 
-  const created = await bb.createAssistant(name, `LibreChat data store for user ${userId}`);
-  userAssistantIds.set(userId, created.assistant_id);
-  logger.info(`[UserStore] Created per-user assistant ${created.assistant_id} for ${userId}`);
+  const created = await bb.createAssistant(name, `LibreChat data store for user ${safeUserId}`);
+  userAssistantIds.set(safeUserId, created.assistant_id);
+  try {
+    await upsertAuthEntry(AUTH_USER, safeUserId, { bbAssistantId: created.assistant_id });
+  } catch (err: unknown) {
+    logger.warn(`[UserStore] Failed to persist new assistant ID for ${safeUserId}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  logger.info(`[UserStore] Created per-user assistant ${created.assistant_id} for ${safeUserId}`);
   return created.assistant_id;
 }
 
@@ -186,7 +276,11 @@ function emptyCache(): UserCache {
 export async function getUserCache(userId: string): Promise<UserCache> {
   const existing = userCaches.get(userId);
   const hasPendingWrites = [...pendingFlushes.keys()].some((k) => k.includes(`:${userId}:`));
-  if (existing?.loaded && (hasPendingWrites || Date.now() - existing.loadedAt < CACHE_TTL_MS)) {
+  const hasInFlightWrites = [...inFlightFlushes].some((k) => k.includes(`:${userId}:`));
+  if (
+    existing?.loaded &&
+    (hasPendingWrites || hasInFlightWrites || Date.now() - existing.loadedAt < CACHE_TTL_MS)
+  ) {
     return existing;
   }
 
@@ -277,6 +371,7 @@ export async function upsertMessage(
   userId: string,
   messageId: string,
   data: Record<string, unknown>,
+  options?: { immediate?: boolean },
 ): Promise<Record<string, unknown>> {
   const cache = await getUserCache(userId);
   const existing = cache.msgs.get(messageId);
@@ -291,7 +386,27 @@ export async function upsertMessage(
   merged.updatedAt = new Date().toISOString();
 
   cache.msgs.set(messageId, { bbId: existing?.bbId ?? '', data: merged });
-  scheduleFlush(`msg:${userId}:${messageId}`, userId, messageId, MSG_TYPE);
+  if (options?.immediate) {
+    const flushKey = `msg:${userId}:${messageId}`;
+    cancelPendingFlush(flushKey);
+    inFlightFlushes.add(flushKey);
+    try {
+      const ok = await flushEntry(userId, messageId, MSG_TYPE);
+      if (!ok) {
+        flushMetrics.immediateFailure++;
+        logger.error(
+          `[UserStore] Immediate flush failed for ${flushKey} metrics=${JSON.stringify(flushMetrics)}`,
+        );
+        throw new Error(`[UserStore] Immediate flush failed for message ${messageId}`);
+      }
+      flushMetrics.immediateSuccess++;
+    } finally {
+      inFlightFlushes.delete(flushKey);
+      pendingFlushes.delete(flushKey);
+    }
+  } else {
+    scheduleFlush(`msg:${userId}:${messageId}`, userId, messageId, MSG_TYPE);
+  }
   return merged;
 }
 
@@ -402,7 +517,7 @@ export async function flushAllPending(): Promise<void> {
 
   logger.info(`[UserStore] Flushing ${keys.length} pending writes before shutdown`);
 
-  const promises: Promise<void>[] = [];
+  const promises: Promise<unknown>[] = [];
   for (const flushKey of keys) {
     cancelPendingFlush(flushKey);
 

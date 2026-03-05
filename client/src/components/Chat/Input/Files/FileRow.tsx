@@ -63,13 +63,19 @@ export default function FileRow({
       return;
     }
 
-    if (files.some((file) => file.progress < 1)) {
+    const pending = files.filter((f) => f.progress < 1);
+    if (pending.length > 0) {
       setFilesLoading(true);
+      console.log('[nash:files] filesLoading=true (waiting on file progress)', {
+        total: files.length,
+        pending: pending.map((f) => ({ id: f.file_id, progress: f.progress, name: f.filename ?? f.file?.name })),
+      });
       return;
     }
 
     if (files.every((file) => file.progress === 1)) {
       setFilesLoading(false);
+      console.log('[nash:files] filesLoading=false (all files progress=1)', { count: files.length });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);

@@ -1,30 +1,68 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 cd "$(dirname "$0")"
 
-unset OPENAI_API_KEY
-echo "=== Stopping any existing servers on :3080 and :3090 ==="
-lsof -ti:3080 | xargs kill -15 2>/dev/null || true
-lsof -ti:3090 | xargs kill -15 2>/dev/null || true
+echo "=== Nash 2.0 ==="
+
+# Kill any existing processes on our ports
+lsof -ti:3080 2>/dev/null | xargs kill -9 2>/dev/null || true
+lsof -ti:3090 2>/dev/null | xargs kill -9 2>/dev/null || true
+sleep 1
+
+# Install Python dependencies
+echo "Installing Python dependencies..."
+uv sync --quiet 2>/dev/null || uv sync
+
+# Install Node dependencies and build packages
+echo "Installing Node dependencies..."
+npm install --silent 2>/dev/null || npm install
+
+echo "Building frontend packages..."
+npx turbo run build \
+  --filter=librechat-data-provider \
+  --filter=@librechat/data-schemas \
+  --filter=@librechat/client \
+  > /dev/null 2>&1 \
+  && echo "  Packages built successfully." \
+  || { echo "  Package build failed! Check with: npx turbo run build --filter=librechat-data-provider"; exit 1; }
+
+# Start Python backend
+echo "Starting Python API on :3080..."
+uv run python -m api.app > /tmp/nash-api.log 2>&1 &
+API_PID=$!
+sleep 2
+
+if ! kill -0 $API_PID 2>/dev/null; then
+  echo "ERROR: API failed to start. Logs:"
+  cat /tmp/nash-api.log
+  exit 1
+fi
+echo "  API running (pid $API_PID)"
+
+# Start frontend dev server
+echo "Starting frontend on :3090..."
+npm run frontend > /tmp/nash-frontend.log 2>&1 &
+FE_PID=$!
 sleep 3
 
-echo "=== Clearing Turborepo cache ==="
-rm -rf .turbo node_modules/.cache/turbo /tmp/backboard-uploads
+if ! kill -0 $FE_PID 2>/dev/null; then
+  echo "ERROR: Frontend failed to start. Logs:"
+  cat /tmp/nash-frontend.log
+  exit 1
+fi
+echo "  Frontend running (pid $FE_PID)"
 
-echo "=== Building all packages (clean) ==="
-npm run build
+echo ""
+echo "============================================"
+echo "  Nash 2.0 running!"
+echo "  Open: http://localhost:3090"
+echo "  API:  http://localhost:3080"
+echo ""
+echo "  Logs: tail -f /tmp/nash-api.log"
+echo "        tail -f /tmp/nash-frontend.log"
+echo "============================================"
+echo ""
+echo "Press Ctrl+C to stop."
 
-echo "=== Starting backend (port 3080) ==="
-npm run backend &
-BE_PID=$!
-
-sleep 5
-
-echo "=== Starting frontend dev server (port 3090) ==="
-npm run frontend:dev &
-FE_PID=$!
-echo "=== Backend PID: $BE_PID | Frontend PID: $FE_PID ==="
-echo "=== Backend: http://localhost:3080  |  Frontend: http://localhost:3090 ==="
-
+trap "kill $API_PID $FE_PID 2>/dev/null; exit 0" INT TERM
 wait

@@ -2,6 +2,7 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QueryKeys, Time, dataService } from 'librechat-data-provider';
 import { logger } from '~/utils';
+import { isAbortedError } from '~/utils/errors';
 
 export const useHealthCheck = (isAuthenticated = false) => {
   const queryClient = useQueryClient();
@@ -31,7 +32,9 @@ export const useHealthCheck = (isAuthenticated = false) => {
             staleTime: 0,
           });
         } catch (error) {
-          console.error('Health check failed:', error);
+          if (!isAbortedError(error)) {
+            console.error('Health check failed:', error);
+          }
         }
       };
 

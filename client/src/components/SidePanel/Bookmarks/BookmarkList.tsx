@@ -22,8 +22,8 @@ export default function BookmarkList({
 
   return (
     <div className="space-y-2" role="list" aria-label={localize('com_ui_bookmarks')}>
-      {bookmarks.map((bookmark) => (
-        <div key={bookmark._id} role="listitem">
+      {bookmarks.map((bookmark, index) => (
+        <div key={bookmark.tag ?? `tag-${index}`} role="listitem">
           <BookmarkCard bookmark={bookmark} position={bookmark.position} moveRow={moveRow} />
         </div>
       ))}

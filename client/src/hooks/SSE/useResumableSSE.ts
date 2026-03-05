@@ -158,7 +158,7 @@ export default function useResumableSSE(
       sseRef.current = sse;
 
       sse.addEventListener('open', () => {
-        console.log('[ResumableSSE] Stream connected');
+        console.log('[nash:stream] connected – waiting for events (final=done)');
         setAbortScroll(false);
         // Restore UI state on successful connection (including reconnection)
         setIsSubmitting(true);
@@ -171,7 +171,7 @@ export default function useResumableSSE(
           const data = JSON.parse(e.data);
 
           if (data.final != null) {
-            console.log('[ResumableSSE] Received FINAL event', {
+            console.log('[nash:stream] FINAL received – stream done', {
               aborted: data.aborted,
               conversationId: data.conversation?.conversationId,
               hasResponseMessage: !!data.responseMessage,
@@ -318,6 +318,7 @@ export default function useResumableSSE(
               textIndex = index;
             }
             contentHandler({ data, submission: currentSubmission as EventSubmission });
+            console.log('[nash:stream] event: text chunk', { index: data.index, textLength: data.text?.value?.length ?? 0 });
             return;
           }
 

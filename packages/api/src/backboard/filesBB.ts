@@ -26,7 +26,38 @@ function emptyCache(): FileTypeCache {
   return { entries: new Map(), loaded: false };
 }
 
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function stackPreview(limit = 8): string {
+  return (new Error('[FilesBB] stack').stack ?? '')
+    .split('\n')
+    .slice(1, limit + 1)
+    .map((line) => line.trim())
+    .join(' | ');
+}
+
+function runtimeValueSummary(label: string, value: unknown): string {
+  const ctor =
+    value != null && typeof value === 'object' && 'constructor' in value
+      ? (value as { constructor?: { name?: string } }).constructor?.name ?? 'unknown'
+      : 'n/a';
+  const keys =
+    value != null && typeof value === 'object' ? Object.keys(value as Record<string, unknown>).join(',') : 'n/a';
+  const preview = safeStringify(value).slice(0, 220);
+  return `${label}: type=${typeof value}, ctor=${ctor}, isArray=${Array.isArray(value)}, keys=${keys}, value=${preview}`;
+}
+
 async function getFileCache(userId: string): Promise<FileTypeCache> {
+  if (typeof userId !== 'string' || userId.trim().length === 0) {
+    logger.warn(`[FilesBB] Invalid userId entering getFileCache | ${runtimeValueSummary('userId', userId)} | stack=${stackPreview()}`);
+  }
+
   const existing = fileCaches.get(userId);
   if (existing?.loaded) {
     return existing;
@@ -69,7 +100,14 @@ export async function getFilesBB(
   sortOptions?: Record<string, number> | null,
   all?: boolean,
 ): Promise<Record<string, unknown>[]> {
-  const userId = filter.user as string;
+  const rawUserId = filter.user;
+  if (typeof rawUserId !== 'string' || rawUserId.trim().length === 0) {
+    logger.warn(
+      `[FilesBB] Invalid filter.user entering getFilesBB | ${runtimeValueSummary('filter.user', rawUserId)} | filterKeys=${Object.keys(filter).join(',')} | stack=${stackPreview()}`,
+    );
+  }
+
+  const userId = rawUserId as string;
   if (!userId) {
     return [];
   }

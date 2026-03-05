@@ -6,12 +6,175 @@ import {
   getMsgsByConvo,
   getUserCache,
   deleteMsgsByConvo,
+  getUserAssistantId,
 } from './userStore';
+import { backboardStorage } from './storage';
+import type { BackboardClient } from './client';
+
+const THREAD_MAP_TYPE = 'thread_mapping';
+const THREAD_HYDRATION_ENABLED = process.env.BACKBOARD_THREAD_HYDRATION_FALLBACK === 'true';
+const threadMap = new Map<string, string>();
+const loadedAssistants = new Set<string>();
+
+const hydrationMetrics = {
+  attempts: 0,
+  success: 0,
+  failure: 0,
+  skippedNoThreadId: 0,
+};
+
+function getClient(): BackboardClient {
+  return backboardStorage.getClient();
+}
+
+function getThreadIdFromMessage(msg: Record<string, unknown>): string | undefined {
+  if (typeof msg.thread_id === 'string' && msg.thread_id.trim()) {
+    return msg.thread_id;
+  }
+  const metadata = msg.metadata as Record<string, unknown> | undefined;
+  if (typeof metadata?.thread_id === 'string' && metadata.thread_id.trim()) {
+    return metadata.thread_id;
+  }
+  return undefined;
+}
+
+function isIncompleteAssistantMessage(msg: Record<string, unknown>): boolean {
+  if (msg.isCreatedByUser === true) {
+    return false;
+  }
+  if (msg._bbContentTruncated === true) {
+    return true;
+  }
+  const text = typeof msg.text === 'string' ? msg.text.trim() : '';
+  const content = msg.content;
+  if (Array.isArray(content)) {
+    return content.length === 0 && text.length === 0;
+  }
+  if (typeof content === 'string') {
+    return content.trim().length === 0 && text.length === 0;
+  }
+  return text.length === 0;
+}
+
+async function loadThreadMappings(client: BackboardClient, assistantId: string): Promise<void> {
+  if (loadedAssistants.has(assistantId)) {
+    return;
+  }
+  const response = await client.getMemories(assistantId);
+  for (const memory of response.memories) {
+    const metadata = (memory.metadata ?? {}) as Record<string, unknown>;
+    if (metadata.type !== THREAD_MAP_TYPE) {
+      continue;
+    }
+    const conversationId = metadata.conversationId as string | undefined;
+    const threadId = metadata.threadId as string | undefined;
+    if (conversationId && threadId && !threadMap.has(conversationId)) {
+      threadMap.set(conversationId, threadId);
+    }
+  }
+  loadedAssistants.add(assistantId);
+}
+
+async function resolveThreadId(userId: string, conversationId: string): Promise<string | undefined> {
+  const cached = threadMap.get(conversationId);
+  if (cached) {
+    return cached;
+  }
+
+  const client = getClient();
+  const assistantId = await getUserAssistantId(userId);
+  try {
+    await loadThreadMappings(client, assistantId);
+  } catch (err) {
+    logger.warn(
+      `[MessagesBB] Failed to load thread mappings for fallback: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return threadMap.get(conversationId);
+}
+
+async function hydrateMessagesFromThread(
+  userId: string,
+  conversationId: string,
+  results: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  if (!THREAD_HYDRATION_ENABLED || results.length === 0) {
+    return results;
+  }
+
+  const candidateIndexes = results
+    .map((msg, index) => ({ msg, index }))
+    .filter(({ msg }) => isIncompleteAssistantMessage(msg))
+    .map(({ index }) => index);
+
+  if (candidateIndexes.length === 0) {
+    return results;
+  }
+
+  hydrationMetrics.attempts++;
+
+  const firstCandidate = results[candidateIndexes[candidateIndexes.length - 1]];
+  const threadId = getThreadIdFromMessage(firstCandidate) ?? (await resolveThreadId(userId, conversationId));
+  if (!threadId) {
+    hydrationMetrics.skippedNoThreadId++;
+    logger.warn(
+      `[MessagesBB] Fallback skipped (missing thread_id) conversationId=${conversationId} attempts=${hydrationMetrics.attempts} success=${hydrationMetrics.success} failure=${hydrationMetrics.failure}`,
+    );
+    return results;
+  }
+
+  try {
+    const thread = await getClient().getThread(threadId);
+    const assistantMessages = (thread.messages ?? []).filter(
+      (message) => message.role === 'assistant' && typeof message.content === 'string' && message.content.length > 0,
+    );
+
+    if (assistantMessages.length === 0) {
+      return results;
+    }
+
+    const updated = [...results];
+    let sourceIndex = assistantMessages.length - 1;
+
+    for (let i = candidateIndexes.length - 1; i >= 0 && sourceIndex >= 0; i--) {
+      const targetIndex = candidateIndexes[i];
+      const sourceContent = assistantMessages[sourceIndex].content as string;
+      sourceIndex--;
+      const current = updated[targetIndex];
+      const hasContentArray = Array.isArray(current.content);
+      const hasStringContent = typeof current.content === 'string' && current.content.trim().length > 0;
+      const hasText = typeof current.text === 'string' && current.text.trim().length > 0;
+      updated[targetIndex] = {
+        ...current,
+        text: hasText && current._bbContentTruncated !== true ? (current.text as string) : sourceContent,
+        content:
+          hasContentArray && (current.content as unknown[]).length > 0 && current._bbContentTruncated !== true
+            ? current.content
+            : hasStringContent && current._bbContentTruncated !== true
+              ? current.content
+              : [{ type: 'text', text: sourceContent }],
+        thread_id: getThreadIdFromMessage(current) ?? threadId,
+      };
+    }
+
+    hydrationMetrics.success++;
+    logger.info(
+      `[MessagesBB] Thread fallback hydrated ${candidateIndexes.length} message(s) conversationId=${conversationId} threadId=${threadId} attempts=${hydrationMetrics.attempts} success=${hydrationMetrics.success} failure=${hydrationMetrics.failure}`,
+    );
+    return updated;
+  } catch (err) {
+    hydrationMetrics.failure++;
+    logger.warn(
+      `[MessagesBB] Thread fallback failed conversationId=${conversationId} threadId=${threadId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return results;
+  }
+}
 
 export async function saveMessageBB(
   req: { user: { id: string }; body?: Record<string, unknown>; config?: Record<string, unknown> },
   params: Record<string, unknown>,
-  metadata?: { context?: string },
+  metadata?: { context?: string; immediate?: boolean },
 ): Promise<Record<string, unknown> | undefined> {
   if (!req?.user?.id) {
     throw new Error('User not authenticated');
@@ -31,6 +194,23 @@ export async function saveMessageBB(
       user: req.user.id,
       messageId,
     };
+    const modelMetadata = (update.metadata as Record<string, unknown> | undefined) ?? {};
+    const isAssistantMessage = update.isCreatedByUser === false;
+    let threadId =
+      (typeof update.thread_id === 'string' && update.thread_id) ||
+      (typeof modelMetadata.thread_id === 'string' ? modelMetadata.thread_id : undefined);
+    const runId =
+      (typeof update.run_id === 'string' && update.run_id) ||
+      (typeof modelMetadata.run_id === 'string' ? modelMetadata.run_id : undefined);
+    if (!threadId && isAssistantMessage) {
+      threadId = await resolveThreadId(req.user.id, conversationId);
+    }
+    if (threadId) {
+      update.thread_id = threadId;
+    }
+    if (runId) {
+      update.run_id = runId;
+    }
 
     update.expiredAt = null;
 
@@ -39,7 +219,8 @@ export async function saveMessageBB(
       update.tokenCount = 0;
     }
 
-    return await upsertMessage(req.user.id, messageId, update);
+    const immediate = metadata?.immediate ?? isAssistantMessage;
+    return await upsertMessage(req.user.id, messageId, update, { immediate });
   } catch (err) {
     logger.error('[saveMessageBB] Error saving message:', err);
     logger.info(`---saveMessageBB context: ${metadata?.context}`);
@@ -169,6 +350,8 @@ export async function getMessagesBB(
   if (messageId) {
     results = results.filter((m) => m.messageId === messageId);
   }
+
+  results = await hydrateMessagesFromThread(user, conversationId, results);
 
   if (select === '_id') {
     return results.map((m) => ({ _id: m.messageId ?? m._id }));

@@ -68,6 +68,19 @@ function getMapForType(cache: AuthCache, type: AuthEntryType): Map<string, Cache
   return cache.tokens;
 }
 
+function requireEntryId(value: unknown, type: AuthEntryType): string {
+  if (typeof value !== 'string') {
+    throw new Error(`[AuthStore] Invalid entry id type for ${type}`);
+  }
+
+  const id = value.trim();
+  if (!id) {
+    throw new Error(`[AuthStore] Missing entry id for ${type}`);
+  }
+
+  return id;
+}
+
 async function getAuthCache(): Promise<AuthCache> {
   if (authCache?.loaded) {
     return authCache;
@@ -116,41 +129,88 @@ async function getAuthCache(): Promise<AuthCache> {
   return cache;
 }
 
+const MAX_RETRIES = 2;
+const RETRY_BASE_MS = 500;
+
+function isTransientError(msg: string): boolean {
+  return (
+    msg.includes('500') ||
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('upsert_columns') ||
+    msg.includes('AttrValueInput') ||
+    msg.includes('attribute error')
+  );
+}
+
 async function upsertAuthEntry(
   type: AuthEntryType,
   id: string,
   data: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  const entryId = requireEntryId(id, type);
   const cache = await getAuthCache();
   const bb = getClient();
   const aid = await getAuthAssistantId();
   const targetMap = getMapForType(cache, type);
-  const existing = targetMap.get(id);
+  const existing = targetMap.get(entryId);
 
   if (existing) {
-    await bb.deleteMemory(aid, existing.bbId);
-  }
-
-  const merged = existing ? { ...existing.data, ...data } : data;
-  merged._id = id;
-
-  const result = await bb.addMemory(aid, JSON.stringify(merged), {
-    type,
-    entryId: id,
-    updatedAt: new Date().toISOString(),
-  });
-
-  const bbId = (result.memory_id ?? result.id ?? '') as string;
-  targetMap.set(id, { bbId, data: merged });
-
-  if (type === AUTH_USER) {
-    const email = (merged.email as string | undefined)?.trim().toLowerCase();
-    if (email) {
-      cache.usersByEmail.set(email, id);
+    try {
+      await bb.deleteMemory(aid, existing.bbId);
+    } catch (delErr: unknown) {
+      const msg = delErr instanceof Error ? delErr.message : String(delErr);
+      if (!msg.includes('404')) {
+        logger.warn(`[AuthStore] Delete before upsert failed for ${type}/${id}: ${msg.slice(0, 200)}`);
+      }
     }
   }
 
-  return merged;
+  const merged = existing ? { ...existing.data, ...data } : data;
+  merged._id = entryId;
+
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await bb.addMemory(aid, JSON.stringify(merged), {
+        type,
+        entryId,
+        updatedAt: new Date().toISOString(),
+      });
+
+      const bbId = (result.memory_id ?? result.id ?? '') as string;
+      targetMap.set(entryId, { bbId, data: merged });
+
+      if (type === AUTH_USER) {
+        const email = (merged.email as string | undefined)?.trim().toLowerCase();
+        if (email) {
+          cache.usersByEmail.set(email, entryId);
+        }
+      }
+
+      return merged;
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES && isTransientError(lastError.message)) {
+        const delay = RETRY_BASE_MS * Math.pow(2, attempt);
+        logger.warn(`[AuthStore] Transient error on upsert ${type}/${entryId} (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${delay}ms: ${lastError.message.slice(0, 200)}`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      break;
+    }
+  }
+
+  // Update in-memory cache even on write failure to avoid stale data
+  targetMap.set(entryId, { bbId: existing?.bbId ?? '', data: merged });
+  if (type === AUTH_USER) {
+    const email = (merged.email as string | undefined)?.trim().toLowerCase();
+    if (email) {
+      cache.usersByEmail.set(email, entryId);
+    }
+  }
+
+  throw lastError!;
 }
 
 async function deleteAuthEntry(type: AuthEntryType, id: string): Promise<boolean> {

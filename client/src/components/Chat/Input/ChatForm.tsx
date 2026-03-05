@@ -19,6 +19,8 @@ import {
   useSubmitMessage,
   useFocusChatEffect,
 } from '~/hooks';
+import { useGetSubscription, useGetStartupConfig } from '~/data-provider';
+import BillingModal from '~/components/Nav/BillingModal';
 import { mainTextareaId, BadgeItem } from '~/common';
 import AttachFileChat from './Files/AttachFileChat';
 import FileFormChat from './Files/FileFormChat';
@@ -46,6 +48,22 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   const [visualRowCount, setVisualRowCount] = useState(1);
   const [isTextAreaFocused, setIsTextAreaFocused] = useState(false);
   const [backupBadges, setBackupBadges] = useState<Pick<BadgeItem, 'id'>[]>([]);
+  const [showBillingGate, setShowBillingGate] = useState(false);
+  const billingCooldownRef = useRef(false);
+
+  const { data: startupConfig } = useGetStartupConfig();
+  const billingEnabled = !!startupConfig?.billing?.enabled;
+  const { data: subscription } = useGetSubscription({ enabled: billingEnabled });
+  const isOverLimit = billingEnabled && subscription != null
+    && subscription.usageTokens >= subscription.includedTokens;
+
+  const handleBillingClose = useCallback((open: boolean) => {
+    setShowBillingGate(open);
+    if (!open) {
+      billingCooldownRef.current = true;
+      setTimeout(() => { billingCooldownRef.current = false; }, 500);
+    }
+  }, []);
 
   const SpeechToText = useRecoilValue(store.speechToText);
   const TextToSpeech = useRecoilValue(store.textToSpeech);
@@ -115,10 +133,15 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   }, []);
 
   const handleFocusOrClick = useCallback(() => {
+    if (isOverLimit && !billingCooldownRef.current) {
+      textAreaRef.current?.blur();
+      setShowBillingGate(true);
+      return;
+    }
     if (isCollapsed) {
       setIsCollapsed(false);
     }
-  }, [isCollapsed]);
+  }, [isCollapsed, isOverLimit]);
 
   useAutoSave({
     files,
@@ -148,6 +171,17 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     setIsScrollable,
     disabled: disableInputs,
   });
+
+  const sendDisabled = filesLoading || isSubmitting || disableInputs || isNotAppendable;
+  useEffect(() => {
+    if (!sendDisabled) return;
+    const reasons: string[] = [];
+    if (filesLoading) reasons.push('filesLoading');
+    if (isSubmitting) reasons.push('isSubmitting');
+    if (disableInputs) reasons.push('disableInputs');
+    if (isNotAppendable) reasons.push('isNotAppendable');
+    console.log('[nash:send] send button disabled, waiting on:', reasons.join(', '));
+  }, [sendDisabled, filesLoading, isSubmitting, disableInputs, isNotAppendable]);
 
   useQueryParams({ textAreaRef });
 
@@ -349,7 +383,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
                     <SendButton
                       ref={submitButtonRef}
                       control={methods.control}
-                      disabled={filesLoading || isSubmitting || disableInputs || isNotAppendable}
+                      disabled={sendDisabled}
                     />
                   )
                 )}
@@ -359,6 +393,9 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
           </div>
         </div>
       </div>
+      {showBillingGate && (
+        <BillingModal open={showBillingGate} onOpenChange={handleBillingClose} />
+      )}
     </form>
   );
 });

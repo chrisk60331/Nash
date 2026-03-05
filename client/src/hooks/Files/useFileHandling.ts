@@ -22,6 +22,7 @@ import { processFileForUpload } from '~/utils/heicConverter';
 import { useChatContext } from '~/Providers/ChatContext';
 import { ephemeralAgentByConvoId } from '~/store';
 import { logger, validateFiles } from '~/utils';
+import { isAbortedError } from '~/utils/errors';
 import useClientResize from './useClientResize';
 import useUpdateFiles from './useUpdateFiles';
 
@@ -104,7 +105,12 @@ const useFileHandling = (params?: UseFileHandling) => {
     {
       onSuccess: (data) => {
         clearUploadTimer(data.temp_file_id);
-        console.log('upload success', data);
+        console.log('[nash:upload] success', {
+          temp_file_id: data.temp_file_id,
+          file_id: data.file_id,
+          status: data.status,
+          filename: data.filename,
+        });
         if (agent_id) {
           queryClient.refetchQueries([QueryKeys.agent, agent_id]);
           return;
@@ -135,11 +141,17 @@ const useFileHandling = (params?: UseFileHandling) => {
             },
             assistant_id ? true : false,
           );
+          console.log('[nash:upload] file marked ready (progress=1)', {
+            temp_file_id: data.temp_file_id,
+            file_id: data.file_id,
+          });
         }, 300);
       },
       onError: (_error, body) => {
         const error = _error as TError | undefined;
-        console.log('upload error', error);
+        if (!isAbortedError(error)) {
+          console.log('upload error', error);
+        }
         const file_id = body.get('file_id');
         const tool_resource = body.get('tool_resource');
         if (tool_resource === EToolResources.execute_code) {
@@ -151,10 +163,13 @@ const useFileHandling = (params?: UseFileHandling) => {
         clearUploadTimer(file_id as string);
         deleteFileById(file_id as string);
 
-        let errorMessage = 'com_error_files_upload';
+        if (error?.code === 'ERR_CANCELED' || isAbortedError(error)) {
+          return;
+        }
 
-        if (error?.code === 'ERR_CANCELED') {
-          errorMessage = 'com_error_files_upload_canceled';
+        let errorMessage = 'com_error_files_upload';
+        if (error?.response?.data?.error) {
+          errorMessage = error.response.data.error;
         } else if (error?.response?.data?.message) {
           errorMessage = error.response.data.message;
         }
@@ -308,11 +323,13 @@ const useFileHandling = (params?: UseFileHandling) => {
         // Add file immediately to show in UI
         addFile(initialExtendedFile);
 
+        const isImageFile = originalFile.type.startsWith('image/');
         // Check if HEIC conversion is needed and show toast
         const isHEIC =
-          originalFile.type === 'image/heic' ||
-          originalFile.type === 'image/heif' ||
-          originalFile.name.toLowerCase().match(/\.(heic|heif)$/);
+          isImageFile &&
+          (originalFile.type === 'image/heic' ||
+            originalFile.type === 'image/heif' ||
+            !!originalFile.name.toLowerCase().match(/\.(heic|heif)$/));
 
         if (isHEIC) {
           showToast({
@@ -322,19 +339,18 @@ const useFileHandling = (params?: UseFileHandling) => {
           });
         }
 
-        // Process file for HEIC conversion if needed
-        const heicProcessedFile = await processFileForUpload(
-          originalFile,
-          0.9,
-          (conversionProgress) => {
-            // Update progress during HEIC conversion (0.1 to 0.5 range for conversion)
-            const adjustedProgress = 0.1 + conversionProgress * 0.4;
-            replaceFile({
-              ...initialExtendedFile,
-              progress: adjustedProgress,
-            });
-          },
-        );
+        // Process HEIC conversion only for image files. Running HEIC sniffing on
+        // non-image files can stall in some browsers and block the upload start.
+        const heicProcessedFile = isImageFile
+          ? await processFileForUpload(originalFile, 0.9, (conversionProgress) => {
+              // Update progress during HEIC conversion (0.1 to 0.5 range for conversion)
+              const adjustedProgress = 0.1 + conversionProgress * 0.4;
+              replaceFile({
+                ...initialExtendedFile,
+                progress: adjustedProgress,
+              });
+            })
+          : originalFile;
 
         let finalProcessedFile = heicProcessedFile;
 

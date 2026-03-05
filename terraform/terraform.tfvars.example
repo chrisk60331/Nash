@@ -1,4 +1,4 @@
-# Copy to terraform.tfvars and fill in values
+# Copy to terraform.tfvars and fill in your values
 # NEVER commit terraform.tfvars to git
 
 environment = "dev"
@@ -6,14 +6,23 @@ environment = "dev"
 # Secrets
 backboard_api_key      = ""
 backboard_assistant_id = ""
-creds_key              = ""
-creds_iv               = ""
 jwt_secret             = ""
 jwt_refresh_secret     = ""
 
-# Set after first deploy (use the App Runner URL or custom domain)
-# domain_client = "https://<id>.us-west-2.awsapprunner.com"
-# domain_server = "https://<id>.us-west-2.awsapprunner.com"
+# Set after first deploy (use the App Runner URL)
+domain_client = ""
+domain_server = ""
 
-# Custom domain linked in App Runner (leave empty to skip)
-# custom_domain = "nash.backboard.io"
+sso_secret = ""
+
+custom_domain = ""
+
+google_client_id     = ""
+google_client_secret = ""
+
+stripe_price_id_plus      = ""
+stripe_price_id_unlimited = ""
+stripe_webhook_secret     = ""
+stripe_secret_key         = ""
+
+backboard_auth_assistant_id = ""

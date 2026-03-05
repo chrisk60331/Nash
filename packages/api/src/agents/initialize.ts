@@ -110,7 +110,11 @@ export interface InitializeAgentDbMethods extends EndpointDbMethods {
   /** Get files from database */
   getFiles: (filter: unknown, sort: unknown, select: unknown, opts?: unknown) => Promise<unknown[]>;
   /** Get tool files by IDs (user-uploaded files only, code files handled separately) */
-  getToolFilesByIds: (fileIds: string[], toolSet: Set<EToolResources>) => Promise<unknown[]>;
+  getToolFilesByIds: (
+    fileIds: string[],
+    toolSet: Set<EToolResources>,
+    userId?: string,
+  ) => Promise<unknown[]>;
   /** Get conversation file IDs */
   getConvoFiles: (conversationId: string) => Promise<string[] | null>;
   /** Get code-generated files by conversation ID and optional message IDs */
@@ -203,7 +207,11 @@ export async function initializeAgent(
       }
     }
 
-    const toolFiles = (await db.getToolFilesByIds(fileIds, toolResourceSet)) as IMongoFile[];
+    const toolFiles = (await db.getToolFilesByIds(
+      fileIds,
+      toolResourceSet,
+      req.user?.id,
+    )) as IMongoFile[];
 
     /**
      * Retrieve execute_code files filtered to the current thread.

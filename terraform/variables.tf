@@ -21,7 +21,7 @@ variable "environment" {
 
 variable "container_port" {
   type        = number
-  description = "Container port exposed by the Node.js service."
+  description = "Container port exposed by the service."
   default     = 3080
 }
 
@@ -34,7 +34,7 @@ variable "ecr_image_tag" {
 variable "cpu" {
   type        = number
   description = "CPU units for App Runner."
-  default     = 4096
+  default     = 2048
   validation {
     condition     = contains([256, 512, 1024, 2048, 4096], var.cpu)
     error_message = "cpu must be one of 256, 512, 1024, 2048, 4096."
@@ -44,7 +44,7 @@ variable "cpu" {
 variable "memory" {
   type        = number
   description = "Memory (MB) for App Runner."
-  default     = 8192
+  default     = 4096
   validation {
     condition     = var.memory >= 512 && var.memory <= 12288
     error_message = "memory must be between 512 and 12288 MB."
@@ -125,18 +125,6 @@ variable "backboard_assistant_id" {
   sensitive   = true
 }
 
-variable "creds_key" {
-  type        = string
-  description = "Encryption key for user credentials."
-  sensitive   = true
-}
-
-variable "creds_iv" {
-  type        = string
-  description = "Initialization vector for user credentials."
-  sensitive   = true
-}
-
 variable "jwt_secret" {
   type        = string
   description = "JWT signing secret."
@@ -149,11 +137,18 @@ variable "jwt_refresh_secret" {
   sensitive   = true
 }
 
+variable "sso_secret" {
+  type        = string
+  description = "Shared secret for SSO."
+  sensitive   = true
+  default     = ""
+}
+
 # --- Non-sensitive config ---
 
 variable "domain_client" {
   type        = string
-  description = "Public client URL (e.g. https://<id>.us-west-2.awsapprunner.com). Set after first deploy."
+  description = "Public client URL (e.g. https://nash.backboard.io)."
   default     = ""
 }
 
@@ -169,21 +164,27 @@ variable "app_title" {
   default     = "Nash"
 }
 
-variable "admin_reset_secret" {
-  type        = string
-}
-
-variable "sso_secret" {
-  type        = string
-  description = "Shared secret for Command Center SSO."
-  sensitive   = true
-  default     = ""
-}
-
 variable "custom_domain" {
   type        = string
-  description = "Custom domain to associate with App Runner (e.g. nash.backboard.io). Leave empty to skip."
+  description = "Custom domain to associate with App Runner. Leave empty to skip."
   default     = ""
+}
+
+# --- Google OAuth ---
+
+variable "google_client_id" {
+  type      = string
+  sensitive = true
+}
+
+variable "google_client_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "google_callback_url" {
+  type    = string
+  default = "/oauth/google/callback"
 }
 
 # --- Stripe Billing ---
@@ -192,20 +193,17 @@ variable "stripe_secret_key" {
   type        = string
   description = "Stripe API secret key."
   sensitive   = true
-
 }
 
 variable "stripe_webhook_secret" {
   type        = string
   description = "Stripe webhook signing secret."
   sensitive   = true
-
 }
 
 variable "stripe_price_id_plus" {
   type        = string
   description = "Stripe Price ID for the Plus subscription tier."
-
 }
 
 variable "stripe_price_id_unlimited" {
@@ -215,15 +213,10 @@ variable "stripe_price_id_unlimited" {
 
 variable "plus_included_tokens" {
   type        = string
-  description = "Token allowance for Plus plan. Unlimited = 6x this value."
+  description = "Token allowance for Plus plan."
   default     = "500000"
 }
 
-variable google_client_id {}
-variable google_client_secret {}
-variable google_callback_url {
-  default = "/oauth/google/callback"
-}
 variable "backboard_auth_assistant_id" {
   type        = string
   description = "Backboard assistant ID for the auth store (users, sessions, tokens)."

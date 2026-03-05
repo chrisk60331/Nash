@@ -157,6 +157,16 @@ export const primeResources = async ({
 
     if (fileIds.length > 0 && isContextEnabled) {
       delete tool_resources[EToolResources.context];
+      const requestUserId = req.user?.id;
+      if (typeof requestUserId !== 'string') {
+        const ctor =
+          requestUserId != null && typeof requestUserId === 'object' && 'constructor' in requestUserId
+            ? (requestUserId as { constructor?: { name?: string } }).constructor?.name ?? 'unknown'
+            : 'n/a';
+        logger.warn(
+          `[agents/resources] getFiles context lookup with non-string req.user.id | type=${typeof requestUserId} ctor=${ctor} isArray=${Array.isArray(requestUserId)} agentId=${agentId} fileIds=${fileIds.length}`,
+        );
+      }
       const context = await getFiles(
         {
           file_id: { $in: fileIds },

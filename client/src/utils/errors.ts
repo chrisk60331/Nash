@@ -19,3 +19,14 @@ export const getResponseStatus = (error: unknown): number | undefined => {
 };
 
 export const isNotFoundError = (error: unknown): boolean => getResponseStatus(error) === 404;
+
+/** True when the request was aborted by the client (navigation, unmount, refetch cancel). */
+export const isAbortedError = (error: unknown): boolean => {
+  if (axios.isAxiosError(error)) {
+    return error.code === 'ERR_CANCELED' || error.message === 'Request aborted';
+  }
+  if (error != null && typeof error === 'object' && 'message' in error) {
+    return (error as { message?: string }).message === 'Request aborted';
+  }
+  return false;
+};

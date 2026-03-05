@@ -231,7 +231,7 @@ export function getOpenAILLMConfig({
        * `include_reasoning` is legacy compat that maps to `{ enabled: true }` only when
        * no `reasoning` object is present, so we intentionally omit it here.
        */
-      llmConfig.reasoning = { effort: reasoning_effort } as OpenRouterReasoning;
+      (llmConfig as Record<string, unknown>).reasoning = { effort: reasoning_effort } as OpenRouterReasoning;
     } else {
       /** No explicit effort; fall back to legacy `include_reasoning` for reasoning token inclusion */
       llmConfig.include_reasoning = true;

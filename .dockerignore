@@ -1,20 +1,16 @@
-**/.circleci
-**/.editorconfig
-**/.dockerignore
-**/.git
-**/.DS_Store
-**/.vscode
-**/node_modules
-
-# Specific patterns to ignore
-data-node
-meili_data*
-librechat.override*
-!librechat.yaml
-Dockerfile*
-docs
-
-# Ignore all hidden files
-.*
-
-terraform/*
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.turbo/
+.git/
+.env
+.env.local
+terraform/
+uploads/
+scripts/
+*.md
+.gitignore
+.dockerignore
+start.sh
+build.sh

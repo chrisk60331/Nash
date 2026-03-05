@@ -960,7 +960,7 @@ export function addTagToConversation(
   conversationId: string,
   payload: t.TTagConversationRequest,
 ): Promise<t.TTagConversationResponse> {
-  return request.put(endpoints.addTagToConversation(conversationId), payload);
+  return request.post(endpoints.addTagToConversation(conversationId), payload);
 }
 export function rebuildConversationTags(): Promise<t.TConversationTagsResponse> {
   return request.post(endpoints.conversationTags('rebuild'));

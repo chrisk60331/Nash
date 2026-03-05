@@ -49,10 +49,6 @@ export default defineConfig(({ command }) => ({
       workbox: {
         globPatterns: [
           '**/*.{js,css,html}',
-          'assets/favicon*.png',
-          'assets/icon-*.png',
-          'assets/apple-touch-icon*.png',
-          'assets/maskable-icon.png',
           'manifest.webmanifest',
         ],
         globIgnores: ['images/**/*', '**/*.map', 'index.html'],
@@ -271,6 +267,12 @@ export default defineConfig(({ command }) => ({
        */
       onwarn(warning, warn) {
         if (warning.message.includes('Error when using sourcemap')) {
+          return;
+        }
+        if (
+          warning.message.includes('Module level directives cause errors') ||
+          warning.message.includes('Use of eval')
+        ) {
           return;
         }
         warn(warning);
