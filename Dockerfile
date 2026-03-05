@@ -6,11 +6,12 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
 
-COPY package.json package-lock.json turbo.json ./
-COPY client/package.json ./client/package.json
-COPY packages/data-provider/package.json ./packages/data-provider/package.json
-COPY packages/data-schemas/package.json ./packages/data-schemas/package.json
-COPY packages/client/package.json ./packages/client/package.json
+
+COPY --chown=node:node package.json package-lock.json turbo.json ./
+COPY --chown=node:node client/package.json ./client/package.json
+COPY --chown=node:node packages/data-provider/package.json ./packages/data-provider/package.json
+COPY --chown=node:node packages/data-schemas/package.json ./packages/data-schemas/package.json
+COPY --chown=node:node packages/client/package.json ./packages/client/package.json
 
 RUN npm config set fetch-retry-maxtimeout 600000 && \
     npm config set fetch-retries 5 && \
@@ -55,6 +56,7 @@ ENV PORT=3080
 
 CMD ["uv", "run", "gunicorn", \
      "--bind", "0.0.0.0:3080", \
+     "--preload", \
      "--worker-class", "gthread", \
      "--workers", "1", \
      "--threads", "32", \

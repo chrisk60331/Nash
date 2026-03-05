@@ -10,6 +10,12 @@ variable "app_name" {
   default     = "nash"
 }
 
+variable "ecr_repository_name" {
+  type        = string
+  description = "ECR repository name (use unique name per env to avoid conflicts)."
+  default     = ""
+}
+
 variable "environment" {
   type        = string
   description = "Deployment environment (dev, test, staging, prod)."
@@ -78,19 +84,19 @@ variable "health_check_path" {
 variable "health_check_interval" {
   type        = number
   description = "Health check interval in seconds."
-  default     = 10
+  default     = 15
 }
 
 variable "health_check_timeout" {
   type        = number
-  description = "Health check timeout in seconds."
-  default     = 5
+  description = "Health check timeout in seconds (Python cold start needs ~10–15s)."
+  default     = 15
 }
 
 variable "health_check_healthy_threshold" {
   type        = number
   description = "Number of consecutive successes to mark healthy."
-  default     = 1
+  default     = 5
 }
 
 variable "health_check_unhealthy_threshold" {

@@ -41,6 +41,8 @@ resource "aws_iam_role" "instance" {
   assume_role_policy = data.aws_iam_policy_document.instance_assume.json
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_iam_role_policy" "instance_ssm" {
   name = "${local.service_name}-ssm-access"
   role = aws_iam_role.instance.id
@@ -51,7 +53,7 @@ resource "aws_iam_role_policy" "instance_ssm" {
       {
         Effect   = "Allow"
         Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-        Resource = values(var.ssm_secret_arns)
+        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.app_name}/${var.environment}/*"
       }
     ]
   })

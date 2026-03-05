@@ -84,7 +84,7 @@ variable "health_check_interval" {
 variable "health_check_timeout" {
   type        = number
   description = "Health check timeout in seconds."
-  default     = 5
+  default     = 20
 }
 
 variable "health_check_healthy_threshold" {
@@ -96,7 +96,7 @@ variable "health_check_healthy_threshold" {
 variable "health_check_unhealthy_threshold" {
   type        = number
   description = "Number of consecutive failures to mark unhealthy."
-  default     = 5
+  default     = 3
 }
 
 variable "ecr_retain_count" {

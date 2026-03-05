@@ -7,23 +7,23 @@ from api.config import settings
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "client", "dist")
 
+import logging
+logging.basicConfig(level=logging.INFO)
 
 def create_app() -> Flask:
+    logging.info("starting app")
     has_static = os.path.isdir(STATIC_DIR)
-    app = Flask(
-        __name__,
-        static_folder=STATIC_DIR if has_static else None,
-        static_url_path="" if has_static else None,
-    )
+    app = Flask(__name__)
+    logging.info("app created")
     app.secret_key = settings.jwt_secret
-
+    logging.info("secret key set")
     CORS(app, supports_credentials=True, origins=[
         settings.domain_client,
         settings.domain_server,
         "http://localhost:3090",
         "http://localhost:3080",
     ])
-
+    logging.info("cors set")
     from api.routes.config_routes import config_bp
     from api.routes.auth import auth_bp
     from api.routes.user import user_bp
@@ -73,5 +73,8 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
+    logging.info("starting app")
     app = create_app()
+    logging.info("app created")
     app.run(host=settings.host, port=settings.port, debug=True)
+    logging.info("app started")

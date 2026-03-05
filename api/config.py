@@ -6,23 +6,23 @@ class Settings(BaseSettings):
     host: str = "localhost"
     port: int = 3080
 
-    backboard_api_key: str = ""
-    backboard_assistant_id: str = ""
-    backboard_auth_assistant_id: str = ""
+    backboard_api_key: str 
+    backboard_assistant_id: str 
+    backboard_auth_assistant_id: str 
 
-    jwt_secret: str = ""
-    jwt_refresh_secret: str = ""
+    jwt_secret: str
+    jwt_refresh_secret: str
     jwt_access_expiry_seconds: int = 15 * 60
     jwt_refresh_expiry_seconds: int = 14 * 24 * 60 * 60
 
-    google_client_id: str = ""
-    google_client_secret: str = ""
+    google_client_id: str
+    google_client_secret: str
     google_callback_url: str = "/oauth/google/callback"
 
-    stripe_secret_key: str = ""
-    stripe_webhook_secret: str = ""
-    stripe_price_id_plus: str = ""
-    stripe_price_id_unlimited: str = ""
+    stripe_secret_key: str 
+    stripe_webhook_secret: str
+    stripe_price_id_plus: str
+    stripe_price_id_unlimited: str
 
     free_included_tokens: int = 250_000
     plus_included_tokens: int = 500_000
