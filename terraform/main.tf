@@ -52,6 +52,7 @@ locals {
       ALLOW_SOCIAL_REGISTRATION=true
       STRIPE_PRICE_ID_PLUS= var.stripe_price_id_plus
       STRIPE_PRICE_ID_UNLIMITED= var.stripe_price_id_unlimited
+      BACKBOARD_AUTH_ASSISTANT_ID=var.backboard_auth_assistant_id
     },
     var.domain_client != "" ? { DOMAIN_CLIENT = var.domain_client } : {},
     var.domain_server != "" ? { DOMAIN_SERVER = var.domain_server } : {},

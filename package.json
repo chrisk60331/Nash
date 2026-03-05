@@ -1,6 +1,6 @@
 {
   "name": "Nash",
-  "version": "v1.1.4",
+  "version": "v1.1.5",
   "description": "",
   "packageManager": "npm@11.10.0",
   "workspaces": [

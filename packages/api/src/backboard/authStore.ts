@@ -32,12 +32,20 @@ async function getAuthAssistantId(): Promise<string> {
     return authAssistantId;
   }
 
+  const envId = process.env.BACKBOARD_AUTH_ASSISTANT_ID;
+  if (envId) {
+    authAssistantId = envId;
+    logger.info(`[AuthStore] Using auth assistant from env: ${authAssistantId}`);
+    return authAssistantId;
+  }
+
   const bb = getClient();
   const assistants = await bb.listAssistants();
   const existing = assistants.find((a) => a.name === 'librechat-auth');
 
   if (existing) {
     authAssistantId = existing.assistant_id;
+    logger.info(`[AuthStore] Found auth assistant by name: ${authAssistantId}`);
     return authAssistantId;
   }
 

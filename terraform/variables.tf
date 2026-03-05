@@ -224,3 +224,7 @@ variable google_client_secret {}
 variable google_callback_url {
   default = "/oauth/google/callback"
 }
+variable "backboard_auth_assistant_id" {
+  type        = string
+  description = "Backboard assistant ID for the auth store (users, sessions, tokens)."
+}
