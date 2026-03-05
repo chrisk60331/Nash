@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     domain_client: str = "http://localhost:3090"
     domain_server: str = "http://localhost:3080"
     help_and_faq_url: str = "https://nash.backboard.io"
+    allow_email_login: bool = True
+    allow_registration: bool = True
     allow_social_login: bool = True
     allow_social_registration: bool = True
     allow_shared_links: bool = True

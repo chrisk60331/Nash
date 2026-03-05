@@ -16,7 +16,7 @@ import {
   SetConvoProvider,
   FileMapContext,
 } from '~/Providers';
-import { useUserTermsQuery, useGetStartupConfig } from '~/data-provider';
+import { useUserTermsQuery, useGetStartupConfig, useInitQuery } from '~/data-provider';
 import { Nav, MobileNav, NAV_WIDTH } from '~/components/Nav';
 import { TermsAndConditionsModal } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
@@ -32,6 +32,8 @@ export default function Root() {
 
   const { isAuthenticated, logout } = useAuthContext();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
+
+  useInitQuery({ enabled: isAuthenticated });
 
   // Global health check - runs once per authenticated session
   useHealthCheck(isAuthenticated);

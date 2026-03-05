@@ -162,9 +162,13 @@ def gen_title(conversation_id):
     try:
         title = run_async(_generate())
     except Exception:
+        title = None
+
+    if title and title != "New Chat":
+        save_conversation_meta(config_id, conversation_id, {"title": title})
+    elif not title:
         title = "New Chat"
 
-    save_conversation_meta(config_id, conversation_id, {"title": title})
     return jsonify({"title": title})
 
 

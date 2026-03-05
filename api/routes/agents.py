@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 
 from flask import Blueprint, request, jsonify, g
@@ -7,6 +8,8 @@ from api.middleware.jwt_auth import require_jwt
 from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
 from api.services.user_service import get_user_config_assistant_id
+
+logger = logging.getLogger(__name__)
 
 agents_bp = Blueprint("agents", __name__)
 
@@ -17,6 +20,7 @@ async def _list_agents(assistant_id: str) -> list[dict]:
     client = get_client()
     response = await client.get_memories(assistant_id)
     agents = []
+    needs_update = []
     for m in response.memories:
         meta = m.metadata or {}
         if meta.get("type") != AGENT_META_TYPE:
@@ -24,9 +28,40 @@ async def _list_agents(assistant_id: str) -> list[dict]:
         try:
             a = json.loads(m.content)
             a["_memory_id"] = m.id
-            agents.append(a)
         except json.JSONDecodeError:
             continue
+        dirty = False
+        old_id = a.get("id", "")
+        if old_id and not old_id.startswith("agent_"):
+            a["id"] = f"agent_{old_id}"
+            dirty = True
+        if not a.get("bb_assistant_id"):
+            bb = await client.create_assistant(
+                name=f"nash-agent-{a['id']}",
+                system_prompt=a.get("instructions", ""),
+            )
+            a["bb_assistant_id"] = str(bb.assistant_id)
+            logger.warning("[agents] migration: created Backboard assistant %s for agent %s", a["bb_assistant_id"], a["id"])
+            dirty = True
+        if dirty:
+            needs_update.append(a)
+        agents.append(a)
+
+    for a in needs_update:
+        memory_id = a.get("_memory_id")
+        if not memory_id:
+            continue
+        content = {k: v for k, v in a.items() if not k.startswith("_")}
+        try:
+            await client.update_memory(
+                assistant_id=assistant_id,
+                memory_id=memory_id,
+                content=json.dumps(content),
+                metadata={"type": AGENT_META_TYPE, "agentId": content["id"]},
+            )
+        except Exception:
+            logger.exception("[agents] migration: failed to persist agent %s", a.get("id"))
+
     return agents
 
 
@@ -50,11 +85,17 @@ def list_agents():
 def create_agent():
     data = request.get_json() or {}
     assistant_id = get_user_config_assistant_id(g.user_id)
-    agent_id = data.get("id") or str(uuid.uuid4())
+    agent_id = data.get("id") or f"agent_{uuid.uuid4()}"
     data["id"] = agent_id
 
     async def _save():
         client = get_client()
+        bb_assistant = await client.create_assistant(
+            name=f"nash-agent-{agent_id}",
+            system_prompt=data.get("instructions", ""),
+        )
+        data["bb_assistant_id"] = str(bb_assistant.assistant_id)
+        logger.warning("[agents] created Backboard assistant %s for agent %s", data["bb_assistant_id"], agent_id)
         await client.add_memory(
             assistant_id=assistant_id,
             content=json.dumps(data),
@@ -66,6 +107,7 @@ def create_agent():
 
 
 @agents_bp.route("/api/agents/<agent_id>", methods=["GET"])
+@agents_bp.route("/api/agents/<agent_id>/expanded", methods=["GET"])
 @require_jwt
 def get_agent(agent_id):
     assistant_id = get_user_config_assistant_id(g.user_id)
@@ -86,19 +128,27 @@ def update_agent(agent_id):
     for a in agents:
         if a.get("id") == agent_id:
             memory_id = a.get("_memory_id")
+            bb_assistant_id = a.get("bb_assistant_id", "")
             a.update({k: v for k, v in data.items() if k != "_memory_id"})
 
             async def _update():
                 client = get_client()
+                content = {k: v for k, v in a.items() if not k.startswith("_")}
                 await client.update_memory(
                     assistant_id=assistant_id,
                     memory_id=memory_id,
-                    content=json.dumps({k: v for k, v in a.items() if k != "_memory_id"}),
+                    content=json.dumps(content),
                     metadata={"type": AGENT_META_TYPE, "agentId": agent_id},
                 )
+                if bb_assistant_id and "instructions" in data:
+                    await client.update_assistant(
+                        bb_assistant_id,
+                        system_prompt=data["instructions"] or "",
+                    )
+                    logger.warning("[agents] synced system_prompt to Backboard assistant %s", bb_assistant_id)
 
             run_async(_update())
-            return jsonify({k: v for k, v in a.items() if k != "_memory_id"})
+            return jsonify({k: v for k, v in a.items() if not k.startswith("_")})
 
     return jsonify({"error": "Not found"}), 404
 
@@ -129,4 +179,16 @@ def get_categories():
 @agents_bp.route("/api/agents/tools", methods=["GET"])
 @require_jwt
 def agent_tools():
+    return jsonify([])
+
+
+@agents_bp.route("/api/agents/actions", methods=["GET"])
+@require_jwt
+def agent_actions():
+    return jsonify([])
+
+
+@agents_bp.route("/api/files/agent/<agent_id>", methods=["GET"])
+@require_jwt
+def agent_files(agent_id):
     return jsonify([])

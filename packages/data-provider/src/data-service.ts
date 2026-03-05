@@ -115,6 +115,10 @@ export function getSearchEnabled(): Promise<boolean> {
   return request.get(endpoints.searchEnabled());
 }
 
+export function getInit(): Promise<Record<string, unknown>> {
+  return request.get(endpoints.init());
+}
+
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user());
 }

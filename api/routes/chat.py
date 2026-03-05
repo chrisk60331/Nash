@@ -51,6 +51,23 @@ def _extract_user_text(payload: dict) -> str:
     return text
 
 
+async def _get_agent_bb_assistant_id(config_assistant_id: str, agent_id: str) -> str:
+    """Look up the Backboard assistant ID for a user-created agent."""
+    client = get_client()
+    response = await client.get_memories(config_assistant_id)
+    for m in response.memories:
+        meta = m.metadata or {}
+        if meta.get("type") != "agent":
+            continue
+        try:
+            agent_data = json.loads(m.content)
+        except json.JSONDecodeError:
+            continue
+        if agent_data.get("id") == agent_id:
+            return agent_data.get("bb_assistant_id", "")
+    return ""
+
+
 async def _list_file_metas(assistant_id: str) -> list[dict]:
     client = get_client()
     response = await client.get_memories(assistant_id)
@@ -270,7 +287,26 @@ def _run_stream_background(stream_id: str, user_id: str, payload: dict):
         assistant_id = get_user_assistant_id(user_id)
         config_assistant_id = get_user_config_assistant_id(user_id)
         conversation_id = payload.get("conversationId")
-        thread_id, conversation_id, is_new = get_or_create_thread(config_assistant_id, conversation_id)
+
+        agent_id = payload.get("agent_id", "")
+        ephemeral_agent = payload.get("ephemeralAgent") or {}
+        agent_bb_assistant_id = ""
+
+        if isinstance(ephemeral_agent, dict) and ephemeral_agent.get("bb_assistant_id"):
+            agent_bb_assistant_id = ephemeral_agent["bb_assistant_id"]
+            logger.warning("[chat] using ephemeral agent bb_assistant_id=%s, agent=%s", agent_bb_assistant_id, ephemeral_agent.get("name", ""))
+        elif agent_id and agent_id.startswith("agent_"):
+            try:
+                agent_bb_assistant_id = run_async(_get_agent_bb_assistant_id(config_assistant_id, agent_id))
+                if agent_bb_assistant_id:
+                    logger.warning("[chat] resolved agent_id=%s -> bb_assistant_id=%s", agent_id, agent_bb_assistant_id)
+                else:
+                    logger.warning("[chat] agent_id=%s has no bb_assistant_id, falling back to default", agent_id)
+            except Exception:
+                logger.exception("Failed to resolve bb_assistant_id for agent_id=%s", agent_id)
+
+        thread_owner_id = agent_bb_assistant_id or config_assistant_id
+        thread_id, conversation_id, is_new = get_or_create_thread(thread_owner_id, conversation_id)
         stream_state["conversationId"] = conversation_id
     except Exception as e:
         stream_state["events"].append({
@@ -571,8 +607,22 @@ def start_chat(endpoint_name=None):
 @chat_bp.route("/api/agents/chat/stream/<stream_id>", methods=["GET"])
 @require_jwt
 def stream_chat(stream_id):
+    is_resume = request.args.get("resume") == "true"
     stream_state = _streams.get(stream_id)
+
     if not stream_state:
+        if is_resume:
+            def completed():
+                yield f"data: {json.dumps({'final': True, 'completed': True})}\n\n"
+            return Response(
+                completed(),
+                mimetype="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache, no-transform",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
         return jsonify({"error": "Stream not found"}), 404
 
     def generate():

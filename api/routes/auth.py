@@ -11,7 +11,7 @@ from api.middleware.jwt_auth import (
     create_refresh_token,
     decode_refresh_token,
 )
-from api.services.user_service import find_user_by_email, find_user_by_id, create_user, update_user_field
+from api.services.user_service import find_user_by_email, find_user_by_id, create_user, update_user_field, verify_password
 from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
 
@@ -93,6 +93,96 @@ def _ensure_bb_assistant(user: dict) -> str:
         update_user_field(user, "bbConfigMigrated", True)
 
     return existing
+
+
+@auth_bp.route("/api/auth/login", methods=["POST"])
+def login():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    password = data.get("password") or ""
+
+    if not email or not password:
+        return jsonify({"message": "Email and password are required"}), 400
+
+    user = find_user_by_email(email)
+    if not user or not verify_password(user, password):
+        return jsonify({"message": "Incorrect email or password"}), 401
+
+    _ensure_bb_assistant(user)
+
+    user_id = user["id"]
+    access_token = create_access_token(user_id)
+    refresh_token = create_refresh_token(user_id)
+
+    user_data = {
+        "id": user["id"],
+        "email": user.get("email", ""),
+        "name": user.get("name", ""),
+        "username": user.get("username", ""),
+        "avatar": user.get("avatar", ""),
+        "provider": user.get("provider", ""),
+        "role": user.get("role", "USER"),
+        "createdAt": user.get("createdAt", ""),
+        "updatedAt": user.get("updatedAt", ""),
+    }
+
+    response = make_response(jsonify({"token": access_token, "user": user_data}))
+    response.set_cookie(
+        "refreshToken",
+        refresh_token,
+        httponly=True,
+        secure=False,
+        samesite="Lax",
+        max_age=settings.jwt_refresh_expiry_seconds,
+        path="/",
+    )
+    return response
+
+
+@auth_bp.route("/api/auth/register", methods=["POST"])
+def register():
+    if not settings.allow_registration:
+        return jsonify({"message": "Registration is disabled"}), 403
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+
+    if not name or not email or not password:
+        return jsonify({"message": "Name, email, and password are required"}), 400
+
+    if len(password) < 8:
+        return jsonify({"message": "Password must be at least 8 characters"}), 400
+
+    existing = find_user_by_email(email)
+    if existing:
+        return jsonify({"message": "A user with this email already exists"}), 409
+
+    user = create_user(
+        email=email,
+        name=name,
+        provider="local",
+        username=username,
+        password=password,
+    )
+
+    _ensure_bb_assistant(user)
+
+    refresh_token = create_refresh_token(user["id"])
+
+    response = make_response(jsonify({"message": "Registration successful"}))
+    response.set_cookie(
+        "refreshToken",
+        refresh_token,
+        httponly=True,
+        secure=False,
+        samesite="Lax",
+        max_age=settings.jwt_refresh_expiry_seconds,
+        path="/",
+    )
+    return response
 
 
 @auth_bp.route("/oauth/google", methods=["GET"])

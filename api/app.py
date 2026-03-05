@@ -40,6 +40,7 @@ def create_app() -> Flask:
     from api.routes.billing import billing_bp
     from api.routes.share import share_bp
     from api.routes.misc import misc_bp
+    from api.routes.init import init_bp
 
     app.register_blueprint(config_bp)
     app.register_blueprint(auth_bp)
@@ -57,6 +58,7 @@ def create_app() -> Flask:
     app.register_blueprint(billing_bp)
     app.register_blueprint(share_bp)
     app.register_blueprint(misc_bp)
+    app.register_blueprint(init_bp)
 
     if has_static:
         @app.route("/", defaults={"path": ""})

@@ -8,6 +8,8 @@ on the user record, not in separate mapping entries.
 import json
 from datetime import datetime, timezone
 
+from werkzeug.security import generate_password_hash, check_password_hash
+
 from api.config import settings
 from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
@@ -30,6 +32,7 @@ def _normalize_user(raw: dict) -> dict:
         "googleId": raw.get("googleId", ""),
         "bbAssistantId": raw.get("bbAssistantId", ""),
         "bbConfigAssistantId": raw.get("bbConfigAssistantId", ""),
+        "password_hash": raw.get("password_hash", ""),
         "bbConfigMigrated": raw.get("bbConfigMigrated", False),
         "plan": raw.get("plan", ""),
         "stripeCustomerId": raw.get("stripeCustomerId", ""),
@@ -137,6 +140,8 @@ def create_user(
     avatar: str = "",
     provider: str = "google",
     role: str = "USER",
+    username: str = "",
+    password: str = "",
 ) -> dict:
     existing = find_user_by_email(email)
     if existing:
@@ -147,10 +152,11 @@ def create_user(
         "id": email.lower().strip(),
         "email": email,
         "name": name,
-        "username": email.split("@")[0],
+        "username": username or email.split("@")[0],
         "avatar": avatar,
         "provider": provider,
         "role": role,
+        "password_hash": generate_password_hash(password) if password else "",
         "bbAssistantId": "",
         "createdAt": now,
         "updatedAt": now,
@@ -170,6 +176,13 @@ def create_user(
     run_async(_save())
     _user_cache[email] = user_data
     return user_data
+
+
+def verify_password(user: dict, password: str) -> bool:
+    pw_hash = user.get("password_hash", "")
+    if not pw_hash:
+        return False
+    return check_password_hash(pw_hash, password)
 
 
 def get_user_assistant_id(user_id: str) -> str:

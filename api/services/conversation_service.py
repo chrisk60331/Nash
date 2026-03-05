@@ -76,10 +76,15 @@ async def _save_conversation_meta(assistant_id: str, conversation_id: str, meta:
     for m in existing.memories:
         mm = m.metadata or {}
         if mm.get("type") == CONVO_META_TYPE and mm.get("conversationId") == conversation_id:
+            try:
+                existing_meta = json.loads(m.content)
+            except json.JSONDecodeError:
+                existing_meta = {}
+            merged = {**existing_meta, **meta}
             await client.update_memory(
                 assistant_id=assistant_id,
                 memory_id=m.id,
-                content=json.dumps(meta),
+                content=json.dumps(merged),
                 metadata={**mm, **{"updatedAt": datetime.now(timezone.utc).isoformat()}},
             )
             return
