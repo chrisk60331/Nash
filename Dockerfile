@@ -42,7 +42,7 @@ RUN uv sync --frozen --no-dev
 
 COPY api/ ./api/
 COPY librechat.yaml ./
-COPY .env.production .env
+
 
 COPY --from=frontend-build /app/client/dist ./client/dist
 
