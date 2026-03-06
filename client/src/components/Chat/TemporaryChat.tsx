@@ -1,16 +1,19 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { TooltipAnchor } from '@librechat/client';
+import { Constants, Tools } from 'librechat-data-provider';
 import { MessageCircleDashed } from 'lucide-react';
-import { useRecoilState, useRecoilCallback } from 'recoil';
+import { useRecoilState, useRecoilCallback, useSetRecoilState } from 'recoil';
 import { useChatContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
-import store from '~/store';
+import store, { ephemeralAgentByConvoId } from '~/store';
 
 export function TemporaryChat() {
   const localize = useLocalize();
   const [isTemporary, setIsTemporary] = useRecoilState(store.isTemporary);
   const { conversation, isSubmitting } = useChatContext();
+  const conversationId = conversation?.conversationId ?? Constants.NEW_CONVO;
+  const setEphemeralAgent = useSetRecoilState(ephemeralAgentByConvoId(conversationId));
 
   const temporaryBadge = {
     id: 'temporary',
@@ -24,6 +27,17 @@ export function TemporaryChat() {
     },
     [isTemporary],
   );
+
+  useEffect(() => {
+    if (!isTemporary) {
+      return;
+    }
+
+    setEphemeralAgent((prev) => ({
+      ...(prev || {}),
+      [Tools.memory]: 'Off',
+    }));
+  }, [isTemporary, setEphemeralAgent]);
 
   if (
     (Array.isArray(conversation?.messages) && conversation.messages.length >= 1) ||

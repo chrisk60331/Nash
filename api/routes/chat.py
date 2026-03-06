@@ -377,7 +377,16 @@ def _run_stream_background(stream_id: str, user_id: str, payload: dict):
                 user_message_id=user_message_id,
                 chat_assistant_id=assistant_id,
             )
-            mem_toggle = ephemeral_agent.get("memory", "Off") if isinstance(ephemeral_agent, dict) else "Off"
+            is_temporary_chat = bool(payload.get("isTemporary"))
+            mem_toggle = (
+                "Off"
+                if is_temporary_chat
+                else (
+                    ephemeral_agent.get("memory", "Off")
+                    if isinstance(ephemeral_agent, dict)
+                    else "Off"
+                )
+            )
             bb_memory = {"Auto": "Auto", "On": "Readonly", "Off": "off"}.get(mem_toggle, "off")
             requested_web_search = (
                 "Auto"
@@ -385,8 +394,9 @@ def _run_stream_background(stream_id: str, user_id: str, payload: dict):
                 else None
             )
             logger.warning(
-                "[chat] MEMORY DEBUG: payload.memory=%r ephemeral_agent.memory=%r ephemeral_agent.web_search=%r -> mem_toggle=%r -> bb_memory=%r",
+                "[chat] MEMORY DEBUG: payload.memory=%r payload.isTemporary=%r ephemeral_agent.memory=%r ephemeral_agent.web_search=%r -> mem_toggle=%r -> bb_memory=%r",
                 payload.get("memory"),
+                payload.get("isTemporary"),
                 ephemeral_agent.get("memory") if isinstance(ephemeral_agent, dict) else None,
                 ephemeral_agent.get("web_search") if isinstance(ephemeral_agent, dict) else None,
                 mem_toggle,

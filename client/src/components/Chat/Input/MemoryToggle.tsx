@@ -1,10 +1,12 @@
 import React, { memo, useState, useCallback, useMemo } from 'react';
 import { Brain, Lock } from 'lucide-react';
 import { Permissions, PermissionTypes } from 'librechat-data-provider';
+import { useRecoilValue } from 'recoil';
 import { useLocalize, useHasAccess } from '~/hooks';
 import { useGetSubscription, useGetStartupConfig } from '~/data-provider';
 import { useBadgeRowContext } from '~/Providers';
 import BillingModal from '~/components/Nav/BillingModal';
+import store from '~/store';
 import { cn } from '~/utils';
 
 type MemoryMode = 'Auto' | 'On' | 'Off';
@@ -30,6 +32,7 @@ function MemoryToggle() {
   const { memory: memoryData } = useBadgeRowContext();
   const { toolValue, handleChange } = memoryData;
   const [showBilling, setShowBilling] = useState(false);
+  const isTemporary = useRecoilValue(store.isTemporary);
 
   const { data: startupConfig } = useGetStartupConfig();
   const billingEnabled = !!startupConfig?.billing?.enabled;
@@ -42,16 +45,22 @@ function MemoryToggle() {
     permission: Permissions.USE,
   });
 
-  const mode = useMemo(() => normalizeMode(toolValue), [toolValue]);
+  const mode = useMemo(
+    () => (isTemporary ? 'Off' : normalizeMode(toolValue)),
+    [isTemporary, toolValue],
+  );
 
   const handleClick = useCallback(() => {
     if (isLocked) {
       setShowBilling(true);
       return;
     }
+    if (isTemporary) {
+      return;
+    }
     const next = getNextMode(mode);
     handleChange({ value: next });
-  }, [mode, handleChange, isLocked]);
+  }, [mode, handleChange, isLocked, isTemporary]);
 
   if (!canUseMemories) {
     return null;
