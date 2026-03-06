@@ -56,6 +56,8 @@ ENV PORT=3080
 
 CMD ["uv", "run", "gunicorn", \
      "--bind", "0.0.0.0:3080", \
-     "--preload", \
-     "--worker-class", "gthread", \
+     "--workers", "2", \
+     "--worker-class", "gevent", \
+     "--worker-connections", "100", \
      "api.app:create_app()"]
+

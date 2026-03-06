@@ -61,12 +61,12 @@ echo "[3/${STEPS}] Building Docker image..."
 docker buildx build --platform linux/amd64 -t "${APP_NAME}" .
 
 echo "[4/${STEPS}] Tagging ${APP_NAME}:${IMAGE_TAG}..."
-docker tag "${APP_NAME}:latest" "${ECR_URL}/${APP_NAME}:${IMAGE_TAG}"
+docker tag "${APP_NAME}:latest" "${ECR_URL}/${APP_NAME}-${ENV}:${IMAGE_TAG}"
 
 echo "[5/${STEPS}] Pushing image..."
 aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_URL}"
-docker push "${ECR_URL}/${APP_NAME}:${IMAGE_TAG}"
-echo "  Pushed ${ECR_URL}/${APP_NAME}:${IMAGE_TAG}"
+docker push "${ECR_URL}/${APP_NAME}-${ENV}:${IMAGE_TAG}"
+echo "  Pushed ${ECR_URL}/${APP_NAME}-${ENV}:${IMAGE_TAG}"
 
 if [[ "${SKIP_TERRAFORM:-0}" != "1" ]]; then
 # ── 6. Terraform apply (full) ──────────────────────────────────────────
@@ -77,6 +77,7 @@ echo "[6/${STEPS}] Running terraform apply (env: ${ENV})..."
 fi
 
 # ── 7-8. Deploy to App Runner ──────────────────────────────────────────
+
 SERVICE_NAME="${APP_NAME}-${ENV}"
 
 echo "[7/${STEPS}] Looking up App Runner service (${SERVICE_NAME})..."

@@ -41,7 +41,7 @@ def create_app() -> Flask:
     from api.routes.share import share_bp
     from api.routes.misc import misc_bp
     from api.routes.init import init_bp
-
+    logging.info("routes imported")
     app.register_blueprint(config_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(user_bp)
@@ -59,7 +59,7 @@ def create_app() -> Flask:
     app.register_blueprint(share_bp)
     app.register_blueprint(misc_bp)
     app.register_blueprint(init_bp)
-
+    logging.info("routes registered")
     if has_static:
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
@@ -68,7 +68,7 @@ def create_app() -> Flask:
             if path and os.path.isfile(full_path):
                 return send_from_directory(STATIC_DIR, path)
             return send_from_directory(STATIC_DIR, "index.html")
-
+    logging.info("spa registered")
     return app
 
 
