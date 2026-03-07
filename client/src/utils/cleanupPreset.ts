@@ -1,5 +1,9 @@
-import { parseConvo } from 'librechat-data-provider';
+import { parseConvo, alternateName } from 'librechat-data-provider';
 import type { TPreset } from 'librechat-data-provider';
+
+const displayNameToEndpoint = Object.fromEntries(
+  Object.entries(alternateName).map(([key, val]) => [val, key]),
+) as Record<string, string>;
 
 type UIPreset = Partial<TPreset> & { presetOverride?: Partial<TPreset> };
 type TCleanupPreset = {
@@ -8,7 +12,10 @@ type TCleanupPreset = {
 };
 
 const cleanupPreset = ({ preset: _preset, defaultParamsEndpoint }: TCleanupPreset): TPreset => {
-  const { endpoint, endpointType } = _preset ?? ({} as UIPreset);
+  let { endpoint, endpointType } = _preset ?? ({} as UIPreset);
+  if (endpoint != null && endpoint !== '' && displayNameToEndpoint[endpoint]) {
+    endpoint = displayNameToEndpoint[endpoint] as typeof endpoint;
+  }
   if (endpoint == null || endpoint === '') {
     console.error(`Unknown endpoint ${endpoint}`, _preset);
     return {

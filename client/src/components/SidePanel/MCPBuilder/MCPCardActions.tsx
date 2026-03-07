@@ -18,6 +18,7 @@ interface MCPCardActionsProps {
   onInitialize: () => void;
   onCancel: (e: React.MouseEvent) => void;
   onRevoke?: () => void;
+  onDelete?: (e: React.MouseEvent) => void;
 }
 
 /**
@@ -44,6 +45,7 @@ export default function MCPCardActions({
   onInitialize,
   onCancel,
   onRevoke,
+  onDelete,
 }: MCPCardActionsProps) {
   const localize = useLocalize();
 
@@ -175,6 +177,24 @@ export default function MCPCardActions({
           aria-label={localize('com_ui_revoke')}
           role="button"
           onClick={onRevoke}
+        >
+          <Trash2 className="size-3.5" aria-hidden="true" />
+        </TooltipAnchor>
+      )}
+
+      {/* Delete button - always available, hidden until card is hovered */}
+      {onDelete && (
+        <TooltipAnchor
+          description={localize('com_ui_delete')}
+          side="top"
+          className={cn(
+            buttonBaseClass,
+            'opacity-0 group-hover:opacity-100 transition-opacity',
+            'text-text-secondary hover:text-red-500 hover:bg-red-500/10',
+          )}
+          aria-label={localize('com_ui_delete')}
+          role="button"
+          onClick={onDelete}
         >
           <Trash2 className="size-3.5" aria-hidden="true" />
         </TooltipAnchor>

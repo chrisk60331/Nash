@@ -241,7 +241,7 @@ export default function BillingContent({ variant = 'modal' }: { variant?: 'modal
           tier="plus"
           name={localize('com_billing_plus')}
           description="Premium models, memory, and enough capacity for daily workflows."
-          price="$29.99 CAD"
+          price="$19.99 CAD"
           priceNote="Per month"
           features={[
             localize('com_billing_plus_feature_1'),

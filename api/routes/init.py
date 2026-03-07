@@ -33,6 +33,7 @@ PROMPT_GROUP_META_TYPE = "prompt_group"
 FAVORITES_META_TYPE = "user_favorites"
 TAG_META_TYPE = "tag"
 FOLDER_META_TYPE = "folder"
+MCP_SERVER_META_TYPE = "mcp_server"
 
 
 def _parse_memory(m) -> tuple[str, dict | None]:
@@ -102,6 +103,7 @@ def init():
     favorites = {}
     tags = []
     folders = []
+    mcp_servers = []
 
     for m in response.memories:
         mtype, data = _parse_memory(m)
@@ -138,6 +140,9 @@ def init():
 
         elif mtype == FOLDER_META_TYPE:
             folders.append(data)
+
+        elif mtype == MCP_SERVER_META_TYPE:
+            mcp_servers.append(data)
 
     _migrate_agents_background(agents, config_assistant_id)
 
@@ -190,7 +195,14 @@ def init():
         "startupConfig": _get_startup_config(),
         "searchEnabled": {"enabled": True},
         "keys": [],
-        "mcpServers": {},
+        "mcpServers": {
+            s.get("serverName"): {
+                k: v for k, v in s.items()
+                if k not in ("_memory_id", "_meta", "openai_tools")
+            }
+            for s in mcp_servers
+            if s.get("serverName")
+        },
         "mcpTools": [],
         "agentTools": [],
         "agentCategories": [],

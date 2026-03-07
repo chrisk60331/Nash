@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.9.0",
+    "title": "v2.9.0",
+    "publishedAt": "2026-03-07T20:00:00Z",
+    "body": "**Minor release**\n\n- **MCP server integration:** Add, delete, and use MCP servers in chat. Tools are fetched on creation, registered on the Backboard assistant, and called via a REQUIRES_ACTION tool loop. Tool names are prefixed with the server name so the model knows which server each tool belongs to.\n- **MCP persistence:** MCP server configs survive page reload via the `/api/init` response.\n- **MCP hover delete:** Hover over any MCP server card in the settings panel to reveal a delete button for quick removal and re-registration.\n- **Share links:** Fix public share lookup (GET) and deletion (DELETE) by moving share records to the global system assistant with per-user metadata tagging.\n- **Billing portal:** Auto-create a Stripe customer for users with manually granted plans so the billing portal always opens correctly.\n- **Auth:** Mark the refresh-token cookie as `secure=True` in the Google OAuth callback."
+  },
+  {
     "tagName": "v2.8.0",
     "title": "v2.8.0",
     "publishedAt": "2026-03-07T16:00:00Z",

@@ -1,5 +1,6 @@
 """Miscellaneous endpoints the frontend expects to exist."""
 import json
+import re
 import uuid
 
 from flask import Blueprint, request, jsonify, g
@@ -7,12 +8,20 @@ from flask import Blueprint, request, jsonify, g
 from api.middleware.jwt_auth import require_jwt
 from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
-from api.services.user_service import get_user_config_assistant_id, get_all_users, find_user_by_id, update_user_field
+from api.services.user_service import (
+    get_user_config_assistant_id,
+    get_user_assistant_id,
+    get_all_users,
+    find_user_by_id,
+    update_user_field,
+)
+from api.services.mcp_service import fetch_mcp_tools, mcp_tools_to_openai_format, strip_server_prefix
 
 misc_bp = Blueprint("misc", __name__)
 
 PROMPT_META_TYPE = "prompt"
 FAVORITES_META_TYPE = "user_favorites"
+MCP_SERVER_META_TYPE = "mcp_server"
 
 
 @misc_bp.route("/api/user/plugins", methods=["GET"])
@@ -381,16 +390,191 @@ def delete_prompt(prompt_id):
 
 # --------------- MCP ---------------
 
+def _sync_mcp_tools_to_assistant(user_id: str, config_assistant_id: str) -> None:
+    """Collect all saved MCP server openai_tools and push to user's Backboard assistant."""
+    try:
+        chat_assistant_id = get_user_assistant_id(user_id)
+        servers = run_async(_list_mcp_servers(config_assistant_id))
+        all_tools = []
+        for s in servers:
+            all_tools.extend(s.get("openai_tools", []))
+
+        async def _update():
+            client = get_client()
+            await client.update_assistant(
+                assistant_id=chat_assistant_id,
+                tools=all_tools,
+            )
+
+        run_async(_update())
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("[mcp] failed to sync tools to assistant: %s", e)
+
+
 @misc_bp.route("/api/mcp/tools", methods=["GET"])
 @require_jwt
 def mcp_tools():
     return jsonify([])
 
 
+def _slugify_server_name(title: str) -> str:
+    """Convert a human-readable title to a slug suitable for use as a serverName."""
+    slug = title.lower().strip()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = slug.strip("-")
+    return slug or "mcp-server"
+
+
+async def _list_mcp_servers(assistant_id: str) -> list[dict]:
+    client = get_client()
+    response = await client.get_memories(assistant_id)
+    servers = []
+    for m in response.memories:
+        meta = m.metadata or {}
+        if meta.get("type") != MCP_SERVER_META_TYPE:
+            continue
+        try:
+            s = json.loads(m.content)
+            s["_memory_id"] = m.id
+            servers.append(s)
+        except json.JSONDecodeError:
+            continue
+    return servers
+
+
+def _mcp_response(server: dict) -> dict:
+    """Format a stored MCP server record as MCPServerDBObjectResponse."""
+    config = server.get("config", {})
+    return {
+        "serverName": server.get("serverName", ""),
+        "dbId": server.get("dbId", ""),
+        **config,
+    }
+
+
 @misc_bp.route("/api/mcp/servers", methods=["GET"])
 @require_jwt
 def mcp_servers():
-    return jsonify({})
+    assistant_id = get_user_config_assistant_id(g.user_id)
+    servers = run_async(_list_mcp_servers(assistant_id))
+    result = {}
+    for s in servers:
+        server_name = s.get("serverName", "")
+        if server_name:
+            result[server_name] = _mcp_response(s)
+    return jsonify(result)
+
+
+@misc_bp.route("/api/mcp/servers", methods=["POST"])
+@require_jwt
+def create_mcp_server():
+    data = request.get_json() or {}
+    config = data.get("config", {})
+    title = (config.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "name is required"}), 400
+
+    server_name = _slugify_server_name(title)
+    assistant_id = get_user_config_assistant_id(g.user_id)
+    servers = run_async(_list_mcp_servers(assistant_id))
+    for s in servers:
+        if s.get("serverName") == server_name:
+            return jsonify({"error": "Server with this name already exists"}), 409
+
+    db_id = str(uuid.uuid4())
+
+    mcp_tools = run_async(fetch_mcp_tools({"config": config}))
+    openai_tools = mcp_tools_to_openai_format(mcp_tools, server_name=server_name)
+
+    server = {
+        "serverName": server_name,
+        "dbId": db_id,
+        "config": config,
+        "openai_tools": openai_tools,
+    }
+
+    async def _save():
+        client = get_client()
+        await client.add_memory(
+            assistant_id=assistant_id,
+            content=json.dumps(server),
+            metadata={
+                "type": MCP_SERVER_META_TYPE,
+                "serverName": server_name,
+                "dbId": db_id,
+            },
+        )
+
+    run_async(_save())
+    _sync_mcp_tools_to_assistant(g.user_id, assistant_id)
+    return jsonify(_mcp_response(server)), 201
+
+
+@misc_bp.route("/api/mcp/servers/<server_name>", methods=["GET"])
+@require_jwt
+def get_mcp_server(server_name: str):
+    assistant_id = get_user_config_assistant_id(g.user_id)
+    servers = run_async(_list_mcp_servers(assistant_id))
+    for s in servers:
+        if s.get("serverName") == server_name:
+            return jsonify(_mcp_response(s))
+    return jsonify({"error": "Not found"}), 404
+
+
+@misc_bp.route("/api/mcp/servers/<server_name>", methods=["PATCH"])
+@require_jwt
+def update_mcp_server(server_name: str):
+    data = request.get_json() or {}
+    config_update = data.get("config", {})
+
+    assistant_id = get_user_config_assistant_id(g.user_id)
+    servers = run_async(_list_mcp_servers(assistant_id))
+
+    for s in servers:
+        if s.get("serverName") == server_name:
+            memory_id = s.get("_memory_id")
+            s["config"] = {**s.get("config", {}), **config_update}
+
+            async def _update():
+                client = get_client()
+                content = {k: v for k, v in s.items() if k != "_memory_id"}
+                await client.update_memory(
+                    assistant_id=assistant_id,
+                    memory_id=memory_id,
+                    content=json.dumps(content),
+                    metadata={
+                        "type": MCP_SERVER_META_TYPE,
+                        "serverName": server_name,
+                        "dbId": s.get("dbId", ""),
+                    },
+                )
+
+            run_async(_update())
+            return jsonify(_mcp_response(s))
+
+    return jsonify({"error": "Not found"}), 404
+
+
+@misc_bp.route("/api/mcp/servers/<server_name>", methods=["DELETE"])
+@require_jwt
+def delete_mcp_server(server_name: str):
+    assistant_id = get_user_config_assistant_id(g.user_id)
+    servers = run_async(_list_mcp_servers(assistant_id))
+
+    for s in servers:
+        if s.get("serverName") == server_name:
+            memory_id = s.get("_memory_id")
+
+            async def _delete():
+                client = get_client()
+                await client.delete_memory(assistant_id=assistant_id, memory_id=memory_id)
+
+    run_async(_delete())
+    _sync_mcp_tools_to_assistant(g.user_id, assistant_id)
+    return jsonify({"success": True})
+
+    return jsonify({"error": "Not found"}), 404
 
 
 @misc_bp.route("/api/mcp/connection/status", methods=["GET"])

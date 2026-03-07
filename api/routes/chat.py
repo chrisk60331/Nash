@@ -17,7 +17,7 @@ from flask import Blueprint, request, jsonify, g, Response
 from backboard import DocumentStatus
 from backboard.exceptions import BackboardAPIError, BackboardValidationError
 from api.middleware.jwt_auth import require_jwt
-from api.services.backboard_service import get_client, stream_message_proxy_compatible
+from api.services.backboard_service import get_client, stream_message_proxy_compatible, run_with_tool_loop
 from api.services.async_runner import run_async, iter_async
 from api.services.user_service import get_user_assistant_id, get_user_config_assistant_id
 from api.services.conversation_service import (
@@ -260,7 +260,7 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
 
     user_text = _extract_user_text(payload)
     model = payload.get("model") or ""
-    endpoint = payload.get("endpoint") or payload.get("endpointType") or "AWS Bedrock"
+    endpoint = payload.get("endpoint") or payload.get("endpointType") or "bedrock"
     endpoint_option = payload.get("endpointOption", {})
     if not model and endpoint_option:
         model = endpoint_option.get("model", "") or endpoint_option.get("modelLabel", "")
@@ -302,6 +302,19 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
             chat_assistant_id=assistant_id,
         ))
 
+    # Load MCP server configs if any are enabled for this conversation.
+    mcp_server_map: dict = {}
+    if isinstance(ephemeral_agent, dict):
+        mcp_enabled = ephemeral_agent.get("mcp", {}) or {}
+        if mcp_enabled:
+            from api.routes.misc import _list_mcp_servers
+            all_servers = run_async(_list_mcp_servers(config_assistant_id))
+            for s in all_servers:
+                sname = s.get("serverName", "")
+                # frontend sends {serverName: true} or {serverName: MCPServerRecord}
+                if sname and sname in mcp_enabled:
+                    mcp_server_map[sname] = s
+
     return {
         "assistant_id": assistant_id,
         "config_assistant_id": config_assistant_id,
@@ -313,6 +326,7 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         "bb_memory": bb_memory,
         "requested_web_search": requested_web_search,
         "pre_queue": pre_queue,
+        "mcp_server_map": mcp_server_map,
     }
 
 
@@ -537,60 +551,79 @@ def stream_chat(stream_id):
         while not pre_q.empty():
             yield f"data: {json.dumps(pre_q.get_nowait())}\n\n"
 
+        mcp_server_map = ctx.get("mcp_server_map", {})
+
         logger.warning(
-            "[chat] stream: opening Backboard stream (thread_id=%s, model=%r, memory=%s, web_search=%r)",
-            thread_id, model, ctx["bb_memory"], ctx["requested_web_search"],
+            "[chat] stream: opening Backboard stream (thread_id=%s, model=%r, memory=%s, web_search=%r, mcp_servers=%s)",
+            thread_id, model, ctx["bb_memory"], ctx["requested_web_search"], list(mcp_server_map.keys()),
         )
 
-        def _consume(web_search_mode):
-            nonlocal full_text, total_tokens
-            stream_started = time.monotonic()
-            chunk_count = 0
-            for chunk in _open_backboard_stream(ctx, web_search_mode):
-                if time.monotonic() - stream_started >= STREAM_TOTAL_TIMEOUT_SEC:
-                    logger.warning("[chat] stream: total timeout after %ss", STREAM_TOTAL_TIMEOUT_SEC)
-                    full_text += "\n\n[Error: response timed out]"
-                    return
-                chunk_type = chunk.get("type", "")
-                if chunk_type == "content_streaming":
-                    content = chunk.get("content", "")
-                    full_text += content
-                    chunk_count += 1
-                    if chunk_count <= 3:
-                        logger.warning("[chat] stream: chunk %d len=%d", chunk_count, len(content))
-                    yield {
-                        "type": "text",
-                        "text": {"value": full_text},
-                        "index": 0,
-                        "messageId": response_message_id,
-                        "conversationId": conversation_id,
-                        "userMessageId": user_message_id,
-                        "thread_id": thread_id,
-                        "stream": True,
-                    }
-                elif chunk_type in ("run_ended", "run_completed"):
-                    total_tokens = int(chunk.get("total_tokens", 0) or 0)
-                    logger.warning("[chat] stream: %s, total_tokens=%d", chunk_type, total_tokens)
-                    return
-                elif chunk_type in ("error", "run_failed"):
-                    error_msg = chunk.get("error") or chunk.get("message", "Unknown error")
-                    raise BackboardAPIError(error_msg)
-
-        try:
+        if mcp_server_map:
+            # MCP path: use non-streaming tool loop, then fake-stream the result
             try:
-                for event in _consume(ctx["requested_web_search"]):
-                    yield f"data: {json.dumps(event)}\n\n"
-            except BackboardAPIError as e:
-                if ctx["requested_web_search"] and not full_text and _is_tool_use_error(str(e)):
-                    logger.warning("[chat] stream: retrying without web_search (model=%r)", model)
-                    for event in _consume(None):
+                final_answer = run_async(run_with_tool_loop(
+                    assistant_id=ctx["assistant_id"],
+                    thread_id=thread_id,
+                    content=ctx["user_text"],
+                    mcp_server_map=mcp_server_map,
+                ))
+                full_text = final_answer or ""
+                total_tokens = (len(ctx["user_text"]) + len(full_text)) // 4 + 1
+                # Emit a single streaming chunk so the UI renders progressively
+                yield f"data: {json.dumps({'type': 'text', 'text': {'value': full_text}, 'index': 0, 'messageId': response_message_id, 'conversationId': conversation_id, 'userMessageId': user_message_id, 'thread_id': thread_id, 'stream': True})}\n\n"
+            except Exception as e:
+                logger.exception("[chat] stream: MCP tool loop failed for conversation %s", conversation_id)
+                full_text = f"[Error: {e}]"
+        else:
+            def _consume(web_search_mode):
+                nonlocal full_text, total_tokens
+                stream_started = time.monotonic()
+                chunk_count = 0
+                for chunk in _open_backboard_stream(ctx, web_search_mode):
+                    if time.monotonic() - stream_started >= STREAM_TOTAL_TIMEOUT_SEC:
+                        logger.warning("[chat] stream: total timeout after %ss", STREAM_TOTAL_TIMEOUT_SEC)
+                        full_text += "\n\n[Error: response timed out]"
+                        return
+                    chunk_type = chunk.get("type", "")
+                    if chunk_type == "content_streaming":
+                        content = chunk.get("content", "")
+                        full_text += content
+                        chunk_count += 1
+                        if chunk_count <= 3:
+                            logger.warning("[chat] stream: chunk %d len=%d", chunk_count, len(content))
+                        yield {
+                            "type": "text",
+                            "text": {"value": full_text},
+                            "index": 0,
+                            "messageId": response_message_id,
+                            "conversationId": conversation_id,
+                            "userMessageId": user_message_id,
+                            "thread_id": thread_id,
+                            "stream": True,
+                        }
+                    elif chunk_type in ("run_ended", "run_completed"):
+                        total_tokens = int(chunk.get("total_tokens", 0) or 0)
+                        logger.warning("[chat] stream: %s, total_tokens=%d", chunk_type, total_tokens)
+                        return
+                    elif chunk_type in ("error", "run_failed"):
+                        error_msg = chunk.get("error") or chunk.get("message", "Unknown error")
+                        raise BackboardAPIError(error_msg)
+
+            try:
+                try:
+                    for event in _consume(ctx["requested_web_search"]):
                         yield f"data: {json.dumps(event)}\n\n"
-                else:
-                    logger.warning("[chat] stream: Backboard API error=%s", e)
-                    full_text += f"\n\n[Error: {e}]"
-        except Exception as e:
-            logger.exception("[chat] stream: failed for conversation %s", conversation_id)
-            full_text += f"\n\n[Error: {e}]"
+                except BackboardAPIError as e:
+                    if ctx["requested_web_search"] and not full_text and _is_tool_use_error(str(e)):
+                        logger.warning("[chat] stream: retrying without web_search (model=%r)", model)
+                        for event in _consume(None):
+                            yield f"data: {json.dumps(event)}\n\n"
+                    else:
+                        logger.warning("[chat] stream: Backboard API error=%s", e)
+                        full_text += f"\n\n[Error: {e}]"
+            except Exception as e:
+                logger.exception("[chat] stream: failed for conversation %s", conversation_id)
+                full_text += f"\n\n[Error: {e}]"
 
         if total_tokens == 0:
             total_tokens = (len(ctx["user_text"]) + len(full_text)) // 4 + 1

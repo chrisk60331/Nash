@@ -7,6 +7,7 @@ import MCPServerDialog from './MCPServerDialog';
 import { getStatusDotColor } from './MCPStatusBadge';
 import MCPCardActions from './MCPCardActions';
 import { useMCPServerManager, useLocalize } from '~/hooks';
+import { useDeleteMCPServerMutation } from '~/data-provider';
 import { cn } from '~/utils';
 
 interface MCPServerCardProps {
@@ -31,6 +32,7 @@ export default function MCPServerCard({
   const localize = useLocalize();
   const triggerRef = useRef<HTMLDivElement>(null);
   const { initializeServer, revokeOAuthForServer } = useMCPServerManager();
+  const deleteMutation = useDeleteMCPServerMutation();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const statusIconProps = getServerStatusIconProps(server.serverName);
@@ -68,6 +70,12 @@ export default function MCPServerCard({
     e.stopPropagation();
     e.preventDefault();
     setDialogOpen(true);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    deleteMutation.mutate(server.serverName);
   };
 
   // Determine status text for accessibility
@@ -142,6 +150,7 @@ export default function MCPServerCard({
             onInitialize={handleInitialize}
             onCancel={onCancel}
             onRevoke={handleRevoke}
+            onDelete={handleDelete}
           />
         </div>
       </div>

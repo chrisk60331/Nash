@@ -107,10 +107,23 @@ def create_checkout():
 @billing_bp.route("/api/billing/portal", methods=["POST"])
 @require_jwt
 def create_portal():
+    from api.services.user_service import update_user_field
     user = find_user_by_id(g.user_id)
-    customer_id = (user or {}).get("stripeCustomerId")
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    customer_id = user.get("stripeCustomerId", "")
     if not customer_id:
-        return jsonify({"error": "No billing account found"}), 400
+        try:
+            customer = stripe.Customer.create(
+                email=user.get("email", ""),
+                name=user.get("name", ""),
+                metadata={"userId": g.user_id},
+            )
+            customer_id = customer.id
+            update_user_field(user, "stripeCustomerId", customer_id)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     try:
         session = stripe.billing_portal.Session.create(
