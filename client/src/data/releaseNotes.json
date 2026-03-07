@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.7.1",
+    "title": "v2.7.1",
+    "publishedAt": "2026-03-07T06:30:00Z",
+    "body": "**Hotfix release**\n\n- **App Runner workers:** Restore Gunicorn to 2 workers in the Docker production image so App Runner health checks and concurrent connections work correctly."
+  },
+  {
     "tagName": "v2.7.0",
     "title": "v2.7.0",
     "publishedAt": "2026-03-07T06:00:00Z",
