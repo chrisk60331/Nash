@@ -1,21 +1,24 @@
 import React, { useMemo, useState } from 'react';
-import { Label, OGDialog, OGDialogTrigger } from '@librechat/client';
+import { Trash2 } from 'lucide-react';
+import { Label, OGDialog, OGDialogTrigger, OGDialogTemplate } from '@librechat/client';
 import type t from 'librechat-data-provider';
 import { useLocalize, TranslationKeys, useAgentCategories } from '~/hooks';
 import { cn, renderAgentAvatar, getContactDisplayName } from '~/utils';
+import { isEphemeralAgent } from '~/common';
 import AgentDetailContent from './AgentDetailContent';
 
 interface AgentCardProps {
   agent: t.Agent;
   onSelect?: (agent: t.Agent) => void;
   onStartChat?: () => void;
+  onDelete?: (agentId: string) => void;
   className?: string;
 }
 
 /**
  * Card component to display agent information with integrated detail dialog
  */
-const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onStartChat, className = '' }) => {
+const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onStartChat, onDelete, className = '' }) => {
   const localize = useLocalize();
   const { categories } = useAgentCategories();
   const [isOpen, setIsOpen] = useState(false);
@@ -69,11 +72,52 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onStartChat, cla
             }
           }}
         >
-          {/* Category badge - top right */}
+          {/* Category badge - top right (shift left when delete is shown) */}
           {categoryLabel && (
-            <span className="absolute right-4 top-3 rounded-md bg-surface-hover px-2 py-0.5 text-xs text-text-secondary">
+            <span
+              className={cn(
+                'absolute top-3 rounded-md bg-surface-hover px-2 py-0.5 text-xs text-text-secondary',
+                onDelete ? 'right-12' : 'right-4',
+              )}
+            >
               {categoryLabel}
             </span>
+          )}
+
+          {/* Delete action: hover on desktop, always visible on mobile */}
+          {onDelete && !isEphemeralAgent(agent.id ?? '') && (
+            <div
+              className="absolute right-3 top-3 z-10 flex items-center opacity-100 md:opacity-0 md:group-hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+              role="presentation"
+            >
+              <OGDialog>
+                <OGDialogTrigger asChild>
+                  <button
+                    type="button"
+                    className="rounded-md p-1.5 text-red-500 hover:bg-surface-hover hover:text-red-600"
+                    aria-label={localize('com_ui_delete_agent')}
+                    title={localize('com_ui_delete_agent')}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </OGDialogTrigger>
+                <OGDialogTemplate
+                  title={localize('com_ui_delete_agent')}
+                  className="max-w-[450px]"
+                  main={
+                    <p className="text-left text-sm text-text-secondary">
+                      {localize('com_ui_delete_agent_confirm')}
+                    </p>
+                  }
+                  selection={{
+                    selectHandler: () => onDelete(agent.id ?? ''),
+                    selectClasses: 'bg-red-600 hover:bg-red-700 dark:hover:bg-red-800 text-white',
+                    selectText: localize('com_ui_delete'),
+                  }}
+                />
+              </OGDialog>
+            </div>
           )}
 
           {/* Avatar */}

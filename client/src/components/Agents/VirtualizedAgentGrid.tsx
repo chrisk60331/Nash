@@ -5,7 +5,9 @@ import { Spinner } from '@librechat/client';
 import { PermissionBits } from 'librechat-data-provider';
 import type t from 'librechat-data-provider';
 import { useMarketplaceAgentsInfiniteQuery } from '~/data-provider/Agents';
+import { useDeleteAgentMutation } from '~/data-provider';
 import { useAgentCategories, useLocalize } from '~/hooks';
+import { useToastContext } from '@librechat/client';
 import { useHasData } from './SmartLoader';
 import ErrorDisplay from './ErrorDisplay';
 import AgentCard from './AgentCard';
@@ -36,8 +38,25 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
   scrollElement,
 }) => {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
   const listRef = useRef<VirtualList>(null);
   const { categories } = useAgentCategories();
+
+  const deleteAgent = useDeleteAgentMutation({
+    onSuccess: () => {
+      showToast({ message: localize('com_ui_agent_deleted'), status: 'success' });
+    },
+    onError: () => {
+      showToast({ message: localize('com_ui_agent_delete_error'), status: 'error' });
+    },
+  });
+
+  const handleDeleteAgent = useCallback(
+    (agentId: string) => {
+      deleteAgent.mutate({ agent_id: agentId });
+    },
+    [deleteAgent],
+  );
 
   // Build query parameters
   const queryParams = useMemo(() => {
@@ -175,7 +194,11 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
               const globalIndex = index * cardsPerRow + cardIndex;
               return (
                 <div key={`${agent.id}-${globalIndex}`} role="gridcell">
-                  <AgentCard agent={agent} onClick={() => onSelectAgent(agent)} />
+                  <AgentCard
+                    agent={agent}
+                    onSelect={onSelectAgent}
+                    onDelete={handleDeleteAgent}
+                  />
                 </div>
               );
             })}
@@ -203,6 +226,7 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
       isFetchingNextPage,
       localize,
       onSelectAgent,
+      handleDeleteAgent,
     ],
   );
 

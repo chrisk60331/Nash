@@ -3,8 +3,10 @@ import { Spinner } from '@librechat/client';
 import { PermissionBits } from 'librechat-data-provider';
 import type t from 'librechat-data-provider';
 import { useMarketplaceAgentsInfiniteQuery } from '~/data-provider/Agents';
+import { useDeleteAgentMutation } from '~/data-provider';
 import { useAgentCategories, useLocalize } from '~/hooks';
 import { useInfiniteScroll } from '~/hooks/useInfiniteScroll';
+import { useToastContext } from '@librechat/client';
 import { useHasData } from './SmartLoader';
 import ErrorDisplay from './ErrorDisplay';
 import AgentCard from './AgentCard';
@@ -28,6 +30,20 @@ const AgentGrid: React.FC<AgentGridProps> = ({
   scrollElementRef,
 }) => {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
+
+  const deleteAgent = useDeleteAgentMutation({
+    onSuccess: () => {
+      showToast({ message: localize('com_ui_agent_deleted'), status: 'success' });
+    },
+    onError: () => {
+      showToast({ message: localize('com_ui_agent_delete_error'), status: 'error' });
+    },
+  });
+
+  const handleDeleteAgent = (agentId: string) => {
+    deleteAgent.mutate({ agent_id: agentId });
+  };
 
   // Get category data from API
   const { categories } = useAgentCategories();
@@ -195,7 +211,12 @@ const AgentGrid: React.FC<AgentGridProps> = ({
             >
               {currentAgents.map((agent: t.Agent, index: number) => (
                 <div key={`${agent.id}-${index}`} role="gridcell">
-                  <AgentCard agent={agent} onSelect={onSelectAgent} onStartChat={onStartChat} />
+                  <AgentCard
+                    agent={agent}
+                    onSelect={onSelectAgent}
+                    onStartChat={onStartChat}
+                    onDelete={handleDeleteAgent}
+                  />
                 </div>
               ))}
             </div>
