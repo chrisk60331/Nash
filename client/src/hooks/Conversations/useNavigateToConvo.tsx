@@ -32,6 +32,9 @@ const useNavigateToConvo = (index = 0) => {
   const clearAllConversations = store.useClearConvoState();
   const applyModelSpecEffects = useApplyModelSpecEffects();
   const setSubmission = useSetRecoilState(store.submissionByIndex(index));
+  const setIsSubmitting = useSetRecoilState(store.isSubmittingFamily(index));
+  const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(index));
+  const setActiveRunId = useSetRecoilState(store.activeRunFamily(index));
   const clearAllLatestMessages = store.useClearLatestMessages(`useNavigateToConvo ${index}`);
   const { hasSetConversation, setConversation: setConvo } = store.useCreateConversationAtom(index);
 
@@ -91,6 +94,9 @@ const useNavigateToConvo = (index = 0) => {
     logger.log('conversation', 'Navigating to conversation', conversation);
     hasSetConversation.current = true;
     setSubmission(null);
+    setIsSubmitting(false);
+    setShowStopButton(false);
+    setActiveRunId(null);
     if (resetLatestMessage) {
       logger.log('latest_message', 'Clearing all latest messages');
       clearAllLatestMessages();

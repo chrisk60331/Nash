@@ -101,6 +101,7 @@ export default function useResumableSSE(
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const submissionRef = useRef<TSubmission | null>(null);
+  const finalReceivedRef = useRef(false);
 
   const {
     setMessages,
@@ -111,6 +112,19 @@ export default function useResumableSSE(
     newConversation,
     resetLatestMessage,
   } = chatHelpers;
+
+  const logClientState = useCallback(
+    (stage: string, extra?: Record<string, unknown>) => {
+      console.log('[nash:stream]', stage, {
+        runIndex,
+        streamId,
+        submissionConversationId: submissionRef.current?.conversation?.conversationId,
+        reconnectAttempt: reconnectAttemptRef.current,
+        ...extra,
+      });
+    },
+    [runIndex, streamId],
+  );
 
   const {
     stepHandler,
@@ -151,6 +165,7 @@ export default function useResumableSSE(
       let { userMessage } = currentSubmission;
       let textIndex: number | null = null;
 
+      finalReceivedRef.current = false;
       const baseUrl = `${apiBaseUrl()}/api/agents/chat/stream/${encodeURIComponent(currentStreamId)}`;
       const url = isResume ? `${baseUrl}?resume=true` : baseUrl;
       logger.debug('[ResumableSSE] Subscribing to stream:', url, { isResume });
@@ -163,6 +178,7 @@ export default function useResumableSSE(
 
       sse.addEventListener('open', () => {
         logger.debug('[nash:stream] connected – waiting for events (final=done)');
+        logClientState('sse_open', { currentStreamId, isResume });
         setAbortScroll(false);
         // Restore UI state on successful connection (including reconnection)
         setIsSubmitting(true);
@@ -180,11 +196,25 @@ export default function useResumableSSE(
               conversationId: data.conversation?.conversationId,
               hasResponseMessage: !!data.responseMessage,
             });
+            logClientState('final_received', {
+              currentStreamId,
+              finalConversationId: data.conversation?.conversationId,
+              aborted: data.aborted,
+              hasResponseMessage: !!data.responseMessage,
+            });
             clearDraft(currentSubmission.conversation?.conversationId);
             try {
               finalHandler(data, currentSubmission as EventSubmission);
+              logClientState('final_handler_completed', {
+                currentStreamId,
+                finalConversationId: data.conversation?.conversationId,
+              });
             } catch (error) {
               console.error('[ResumableSSE] Error in finalHandler:', error);
+              logClientState('final_handler_error', {
+                currentStreamId,
+                error: error instanceof Error ? error.message : String(error),
+              });
               setIsSubmitting(false);
               setShowStopButton(false);
             }
@@ -193,8 +223,10 @@ export default function useResumableSSE(
             // Optimistically remove from active jobs
             removeActiveJob(currentStreamId);
             (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
+            finalReceivedRef.current = true;
             sse.close();
             setStreamId(null);
+            logClientState('final_cleanup_complete', { currentStreamId });
             return;
           }
 
@@ -359,6 +391,7 @@ export default function useResumableSSE(
         // 404 means job doesn't exist (completed/deleted) - don't retry
         if (responseCode === 404) {
           logger.debug('[ResumableSSE] Stream not found (404) - job completed or expired');
+          logClientState('stream_404_cleanup', { currentStreamId });
           sse.close();
           removeActiveJob(currentStreamId);
           setIsSubmitting(false);
@@ -439,11 +472,18 @@ export default function useResumableSSE(
           return;
         }
 
+        // Spurious error fired by sse.js when sse.close() is called after a completed stream.
+        // Do not reconnect - the stream already finished successfully.
+        if (finalReceivedRef.current) {
+          return;
+        }
+
         // Network failure or unknown HTTP error - attempt reconnection with backoff
         logger.debug('[ResumableSSE] Stream error (network failure) - will attempt reconnect', {
           responseCode,
           hasData: !!e.data,
         });
+        logClientState('stream_error', { currentStreamId, responseCode, hasData: !!e.data });
 
         if (reconnectAttemptRef.current < MAX_RETRIES) {
           // Increment counter BEFORE close() so abort handler knows we're reconnecting
@@ -453,6 +493,11 @@ export default function useResumableSSE(
           logger.debug(
             `[ResumableSSE] Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current}/${MAX_RETRIES})`,
           );
+          logClientState('reconnect_scheduled', {
+            currentStreamId,
+            delay,
+            attempt: reconnectAttemptRef.current,
+          });
 
           sse.close();
 
@@ -469,6 +514,7 @@ export default function useResumableSSE(
           setShowStopButton(true);
         } else {
           console.error('[ResumableSSE] Max reconnect attempts reached');
+          logClientState('max_retries_reached', { currentStreamId });
           sse.close();
           errorHandler({ data: undefined, submission: currentSubmission as EventSubmission });
           // Optimistically remove from active jobs on max retries
@@ -489,10 +535,12 @@ export default function useResumableSSE(
         // (error handler will set up the reconnect timeout)
         if (reconnectAttemptRef.current > 0) {
           logger.debug('[ResumableSSE] Stream closed for reconnect - preserving state');
+          logClientState('abort_for_reconnect', { currentStreamId });
           return;
         }
 
         logger.debug('[ResumableSSE] Stream aborted (intentional close) - no reconnect');
+        logClientState('abort_no_reconnect', { currentStreamId });
         // Clear any pending reconnect attempts
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
@@ -650,12 +698,17 @@ export default function useResumableSSE(
     submissionRef.current = submission;
 
     const initStream = async () => {
+      logClientState('init_stream', {
+        resumeStreamId,
+        submissionConversationId: submission.conversation?.conversationId,
+      });
       setIsSubmitting(true);
       setShowStopButton(true);
 
       if (resumeStreamId) {
         // Resume: just subscribe to existing stream, don't start new generation
         logger.debug('[ResumableSSE] Resuming existing stream:', resumeStreamId);
+        logClientState('resume_existing_stream', { resumeStreamId });
         setStreamId(resumeStreamId);
         // Optimistically add to active jobs (in case it's not already there)
         addActiveJob(resumeStreamId);
@@ -663,14 +716,19 @@ export default function useResumableSSE(
       } else {
         // New generation: start and then subscribe
         logger.debug('[ResumableSSE] Starting NEW generation');
+        logClientState('start_new_generation', {
+          submissionConversationId: submission.conversation?.conversationId,
+        });
         const newStreamId = await startGeneration(submission);
         if (newStreamId) {
           setStreamId(newStreamId);
+          logClientState('generation_started', { newStreamId });
           // Optimistically add to active jobs
           addActiveJob(newStreamId);
           subscribeToStream(newStreamId, submission);
         } else {
           console.error('[ResumableSSE] Failed to get streamId from startGeneration');
+          logClientState('generation_start_failed');
         }
       }
     };
@@ -679,6 +737,7 @@ export default function useResumableSSE(
 
     return () => {
       logger.debug('[ResumableSSE] Cleanup - closing SSE, resetting UI state');
+      logClientState('effect_cleanup');
       // Cleanup on unmount/navigation - close connection but DO NOT abort backend
       // Reset UI state so it doesn't leak to other conversations
       // If user returns to this conversation, useResumeOnLoad will restore the state

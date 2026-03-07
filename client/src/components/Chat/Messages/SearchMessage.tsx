@@ -40,6 +40,7 @@ export default function SearchMessage({ message }: Pick<TMessageProps, 'message'
   const UsernameDisplay = useRecoilValue<boolean>(store.UsernameDisplay);
   const { user } = useAuthContext();
   const localize = useLocalize();
+  const userDisplayName = user?.nickname?.trim() || user?.name || user?.username || '';
 
   const iconData: TMessageIcon = useMemo(
     () => ({
@@ -53,17 +54,14 @@ export default function SearchMessage({ message }: Pick<TMessageProps, 'message'
 
   const messageLabel = useMemo(() => {
     if (message?.isCreatedByUser) {
-      return UsernameDisplay
-        ? (user?.name ?? '') || (user?.username ?? '')
-        : localize('com_user_message');
+      return UsernameDisplay ? userDisplayName : localize('com_user_message');
     }
     return message?.sender ?? '';
   }, [
     message?.isCreatedByUser,
     message?.sender,
     UsernameDisplay,
-    user?.name,
-    user?.username,
+    userDisplayName,
     localize,
   ]);
 

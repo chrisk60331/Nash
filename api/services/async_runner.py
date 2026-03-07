@@ -36,3 +36,30 @@ def run_async(coro):
     loop = _get_loop()
     future: Future = asyncio.run_coroutine_threadsafe(coro, loop)
     return future.result()
+
+
+_STOP = object()
+
+
+def iter_async(async_iter, *, idle_timeout: float = 45):
+    """Yield items from an async iterator, one at a time, from sync code.
+
+    Each call to ``__next__`` schedules a single ``__anext__`` on the
+    persistent event loop and blocks the *current greenlet* (not the
+    worker) until the value arrives.  This gives a direct pull-based
+    pipeline with no intermediate queue.
+    """
+    loop = _get_loop()
+
+    async def _next():
+        try:
+            return await asyncio.wait_for(async_iter.__anext__(), timeout=idle_timeout)
+        except StopAsyncIteration:
+            return _STOP
+
+    while True:
+        future: Future = asyncio.run_coroutine_threadsafe(_next(), loop)
+        value = future.result()
+        if value is _STOP:
+            return
+        yield value

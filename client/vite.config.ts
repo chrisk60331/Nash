@@ -25,6 +25,13 @@ export default defineConfig(({ command }) => ({
       '/api': {
         target: backendURL,
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.url?.includes('/agents/chat/stream/')) {
+              proxyReq.setHeader('Accept-Encoding', 'identity');
+            }
+          });
+        },
       },
       '/oauth': {
         target: backendURL,

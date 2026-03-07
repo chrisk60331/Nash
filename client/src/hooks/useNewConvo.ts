@@ -55,6 +55,9 @@ const useNewConvo = (index = 0) => {
   const activeFolderId = useRecoilValue(store.activeFolderId);
   const clearAllLatestMessages = store.useClearLatestMessages(`useNewConvo ${index}`);
   const setSubmission = useSetRecoilState<TSubmission | null>(store.submissionByIndex(index));
+  const setIsSubmitting = useSetRecoilState(store.isSubmittingFamily(index));
+  const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(index));
+  const setActiveRunId = useSetRecoilState(store.activeRunFamily(index));
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
 
   const hasAgentAccess = useHasAccess({
@@ -226,6 +229,9 @@ const useNewConvo = (index = 0) => {
           logger.log('conversation', 'Setting conversation from `useNewConvo`', conversation);
           setConversation(conversation);
         }
+        setIsSubmitting(false);
+        setShowStopButton(false);
+        setActiveRunId(null);
         setSubmission({} as TSubmission);
         if (!(keepLatestMessage ?? false)) {
           logger.log('latest_message', 'Clearing all latest messages');
@@ -254,7 +260,16 @@ const useNewConvo = (index = 0) => {
           state: disableFocus ? {} : { focusChat: true },
         });
       },
-    [endpointsConfig, defaultPreset, assistantsListMap, modelsQuery.data, hasAgentAccess],
+    [
+      endpointsConfig,
+      defaultPreset,
+      assistantsListMap,
+      modelsQuery.data,
+      hasAgentAccess,
+      setIsSubmitting,
+      setShowStopButton,
+      setActiveRunId,
+    ],
   );
 
   const newConversation = useCallback(

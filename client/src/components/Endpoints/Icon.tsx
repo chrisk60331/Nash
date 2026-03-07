@@ -70,7 +70,7 @@ const Icon: React.FC<IconProps> = memo((props) => {
   const localize = useLocalize();
 
   if (isCreatedByUser) {
-    const username = user?.name ?? user?.username ?? localize('com_nav_user');
+    const username = user?.nickname?.trim() || user?.name || user?.username || localize('com_nav_user');
     return (
       <UserAvatar
         size={size}

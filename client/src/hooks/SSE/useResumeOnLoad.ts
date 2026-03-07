@@ -216,6 +216,11 @@ export default function useResumeOnLoad(
         messages,
         conversationId,
       );
+      console.log('[nash:resume] set submission from resumeState', {
+        conversationId,
+        streamId: streamStatus.streamId,
+        responseMessageId: streamStatus.resumeState.responseMessageId,
+      });
       setSubmission(submission);
     } else {
       // Minimal submission without resume state
@@ -237,6 +242,10 @@ export default function useResumeOnLoad(
         // Signal to useResumableSSE to subscribe to existing stream instead of starting new
         resumeStreamId: streamStatus.streamId,
       } as TSubmission & { resumeStreamId: string };
+      console.log('[nash:resume] set minimal submission', {
+        conversationId,
+        streamId: streamStatus.streamId,
+      });
       setSubmission(submission);
     }
   }, [

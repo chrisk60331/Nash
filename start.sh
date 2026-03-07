@@ -26,9 +26,16 @@ npx turbo run build \
   && echo "  Packages built successfully." \
   || { echo "  Package build failed! Check with: npx turbo run build --filter=librechat-data-provider"; exit 1; }
 
-# Start Python backend
-echo "Starting Python API on :3080..."
-uv run python -m api.app > /tmp/nash-api.log 2>&1 &
+# Start Python backend with the same Gunicorn/Gevent stack used in Docker.
+# OBJC_DISABLE_INITIALIZE_FORK_SAFETY suppresses the macOS fork-safety crash
+# that kills gevent workers on Apple Silicon / macOS 12+.
+echo "Starting Python API on :3080 with gunicorn..."
+OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn \
+  --bind 0.0.0.0:3080 \
+  --workers 1 \
+  --worker-class gevent \
+  --worker-connections 1000 \
+  "api.app:create_app()" > /tmp/nash-api.log 2>&1 &
 API_PID=$!
 sleep 2
 

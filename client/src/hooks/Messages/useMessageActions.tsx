@@ -30,6 +30,7 @@ export default function useMessageActions(props: TMessageActions) {
   const { user } = useAuthContext();
   const UsernameDisplay = useRecoilValue<boolean>(store.UsernameDisplay);
   const { message, currentEditId, setCurrentEditId, searchResults } = props;
+  const userDisplayName = user?.nickname?.trim() || user?.name || user?.username || '';
 
   const { ask, index, regenerate, isSubmitting, conversation, latestMessage, handleContinue } =
     useChatContext();
@@ -102,7 +103,7 @@ export default function useMessageActions(props: TMessageActions) {
 
   const messageLabel = useMemo(() => {
     if (message?.isCreatedByUser === true) {
-      return UsernameDisplay ? (user?.name ?? '') || user?.username : localize('com_user_message');
+      return UsernameDisplay ? userDisplayName : localize('com_user_message');
     } else if (agent) {
       return agent.name ?? 'Assistant';
     } else if (assistant) {
@@ -110,7 +111,7 @@ export default function useMessageActions(props: TMessageActions) {
     } else {
       return message?.sender;
     }
-  }, [message, agent, assistant, UsernameDisplay, user, localize]);
+  }, [message, agent, assistant, UsernameDisplay, userDisplayName, localize]);
 
   const feedbackMutation = useUpdateFeedbackMutation(
     conversation?.conversationId || '',

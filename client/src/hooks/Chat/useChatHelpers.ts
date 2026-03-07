@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { QueryKeys, isAssistantsEndpoint } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useResetRecoilState, useSetRecoilState } from 'recoil';
@@ -178,6 +178,16 @@ export default function useChatHelpers(index = 0, paramId?: string) {
   const [showPopover, setShowPopover] = useRecoilState(store.showPopoverFamily(index));
   const [abortScroll, setAbortScroll] = useRecoilState(store.abortScrollFamily(index));
   const [optionSettings, setOptionSettings] = useRecoilState(store.optionSettingsFamily(index));
+
+  useEffect(() => {
+    console.log('[nash:chatHelpers] isSubmitting changed', {
+      index,
+      queryParam,
+      conversationId,
+      isSubmitting,
+      latestMessageId: latestMessage?.messageId,
+    });
+  }, [index, queryParam, conversationId, isSubmitting, latestMessage?.messageId]);
 
   return {
     newConversation,

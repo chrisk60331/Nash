@@ -2,6 +2,7 @@ import { memo, useMemo, ReactElement } from 'react';
 import { useRecoilValue } from 'recoil';
 import MarkdownLite from '~/components/Chat/Messages/Content/MarkdownLite';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
+import useProgressiveText from '~/hooks/useProgressiveText';
 import { useMessageContext } from '~/Providers';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -22,15 +23,18 @@ const TextPart = memo(({ text, isCreatedByUser, showCursor }: TextPartProps) => 
   const enableUserMsgMarkdown = useRecoilValue(store.enableUserMsgMarkdown);
   const showCursorState = useMemo(() => showCursor && isSubmitting, [showCursor, isSubmitting]);
 
+  const isAssistantStreaming = !isCreatedByUser && isSubmitting && isLatestMessage;
+  const displayText = useProgressiveText(text, isAssistantStreaming);
+
   const content: ContentType = useMemo(() => {
     if (!isCreatedByUser) {
-      return <Markdown content={text} isLatestMessage={isLatestMessage} />;
+      return <Markdown content={displayText} isLatestMessage={isLatestMessage} />;
     } else if (enableUserMsgMarkdown) {
-      return <MarkdownLite content={text} />;
+      return <MarkdownLite content={displayText} />;
     } else {
-      return <>{text}</>;
+      return <>{displayText}</>;
     }
-  }, [isCreatedByUser, enableUserMsgMarkdown, text, isLatestMessage]);
+  }, [isCreatedByUser, enableUserMsgMarkdown, displayText, isLatestMessage]);
 
   return (
     <div

@@ -353,7 +353,7 @@ export default function useEventHandlers({
       const initialResponse = {
         ...submission.initialResponse,
         parentMessageId: userMessage.messageId,
-        messageId: userMessage.messageId + '_',
+        messageId: data.responseMessageId ?? userMessage.messageId + '_',
       };
       if (isRegenerate) {
         setMessages([...messages, initialResponse]);
@@ -441,6 +441,14 @@ export default function useEventHandlers({
         isTemporary: _isTemporary = false,
       } = submission;
 
+      console.log('[nash:finalHandler] enter', {
+        submissionConversationId: submissionConvo.conversationId,
+        requestMessageId: requestMessage?.messageId,
+        responseMessageId: responseMessage?.messageId,
+        hasConversation: !!conversation,
+        runMessagesCount: runMessages?.length ?? 0,
+      });
+
       try {
         // Handle early abort - aborted during tool loading before any messages saved
         // Don't update conversation state, just reset UI and stay on new chat
@@ -477,6 +485,7 @@ export default function useEventHandlers({
         const currentMessages = getMessages();
         /* Early return if messages are empty; i.e., the user navigated away */
         if (!currentMessages || currentMessages.length === 0) {
+          console.log('[nash:finalHandler] no current messages, returning early');
           return;
         }
 
@@ -616,7 +625,16 @@ export default function useEventHandlers({
             navigate(`/c/${finalConversationId}`, { replace: true });
           }
         }
+        console.log('[nash:finalHandler] applied final state', {
+          finalConversationId,
+          messageConvoId,
+          finalMessagesLength: finalMessages.length,
+          isNewConvo,
+        });
       } finally {
+        console.log('[nash:finalHandler] cleanup', {
+          submissionConversationId: submissionConvo.conversationId,
+        });
         setSubmission?.(null);
         setShowStopButton(false);
         setIsSubmitting(false);
@@ -643,6 +661,11 @@ export default function useEventHandlers({
   const errorHandler = useCallback(
     ({ data, submission }: { data?: TResData; submission: EventSubmission }) => {
       const { messages, userMessage, initialResponse } = submission;
+      console.log('[nash:errorHandler] enter', {
+        submissionConversationId: submission.conversation?.conversationId,
+        userMessageId: userMessage.messageId,
+        hasData: !!data,
+      });
       setCompleted((prev) => new Set(prev.add(initialResponse.messageId)));
 
       const conversationId =

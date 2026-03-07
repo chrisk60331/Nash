@@ -600,6 +600,7 @@ export type TBaseResData = {
   conversation: t.TConversation;
   conversationId?: string;
   runMessages?: t.TMessage[];
+  responseMessageId?: string;
 };
 
 export type TResData = TBaseResData & {
