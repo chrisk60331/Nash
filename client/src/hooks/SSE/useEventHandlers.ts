@@ -16,6 +16,7 @@ import {
 import type {
   TMessage,
   TConversation,
+  TSubmission,
   EventSubmission,
   TStartupConfig,
 } from 'librechat-data-provider';
@@ -58,6 +59,7 @@ export type EventHandlerParams = {
   setMessages: (messages: TMessage[]) => void;
   getMessages: () => TMessage[] | undefined;
   setIsSubmitting: SetterOrUpdater<boolean>;
+  setSubmission?: SetterOrUpdater<TSubmission | null>;
   setConversation?: SetterOrUpdater<TConversation | null>;
   newConversation?: ConvoGenerator;
   setShowStopButton: SetterOrUpdater<boolean>;
@@ -170,6 +172,7 @@ export default function useEventHandlers({
   getMessages,
   setCompleted,
   isAddedRequest = false,
+  setSubmission,
   setConversation,
   setIsSubmitting,
   newConversation,
@@ -569,6 +572,14 @@ export default function useEventHandlers({
           removeConvoFromAllQueries(queryClient, submissionConvo.conversationId);
         }
 
+        /* Ensure new conversation appears in sidebar list when stream completes (e.g. assistants
+         * may not have added it in createdHandler, or cache was empty at created time). */
+        if (isNewConvo && finalConversationId && finalConversation) {
+          addConvoToAllQueries(queryClient, finalConversation);
+          /* Refetch list so the new thread appears even when cache was empty or optimistic add skipped. */
+          queryClient.invalidateQueries([QueryKeys.allConversations]);
+        }
+
         if (setConversation && isAddedRequest !== true) {
           setConversation((prevState) => {
             const update = {
@@ -606,6 +617,7 @@ export default function useEventHandlers({
           }
         }
       } finally {
+        setSubmission?.(null);
         setShowStopButton(false);
         setIsSubmitting(false);
       }
@@ -619,6 +631,7 @@ export default function useEventHandlers({
       isAddedRequest,
       announcePolite,
       setConversation,
+      setSubmission,
       setIsSubmitting,
       setShowStopButton,
       location.pathname,

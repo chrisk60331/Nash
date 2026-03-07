@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.6.1",
+    "title": "v2.6.1",
+    "publishedAt": "2026-03-07T03:21:36Z",
+    "body": "**Hotfix release**\n\n- **New-chat completion stability:** Stop newly created chats from falling back into stale resume state after the server assigns a real conversation ID.\n- **Stream lifecycle fix:** Keep resume-on-load from reattaching to a just-finished run when the route changes from `/c/new` to the real conversation, which prevented replies from settling and hid the thread until reload.\n- **Sidebar consistency:** Ensure completed chats are reflected in the conversations list immediately instead of waiting for a full page refresh."
+  },
+  {
     "tagName": "v2.6.0",
     "title": "v2.6.0",
     "publishedAt": "2026-03-07T01:40:47Z",

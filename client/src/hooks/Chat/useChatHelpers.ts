@@ -183,6 +183,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
     newConversation,
     conversation,
     setConversation,
+    setSubmission,
     // getConvos,
     // setConvos,
     isSubmitting,

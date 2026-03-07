@@ -116,7 +116,10 @@ export default function useResumeOnLoad(
   // Check for active stream when conversation changes
   // Allow check if no submission OR submission is for a different conversation (stale)
   const submissionConvoId = currentSubmission?.conversation?.conversationId;
-  const hasActiveSubmissionForThisConvo = currentSubmission && submissionConvoId === conversationId;
+  const currentConversationId = currentConversation?.conversationId;
+  const hasActiveSubmissionForThisConvo =
+    !!currentSubmission &&
+    (submissionConvoId === conversationId || currentConversationId === conversationId);
 
   const shouldCheck =
     resumableEnabled &&
@@ -135,6 +138,7 @@ export default function useResumeOnLoad(
       messagesLoaded,
       hasCurrentSubmission: !!currentSubmission,
       currentSubmissionConvoId: currentSubmission?.conversation?.conversationId,
+      currentConversationId,
       isSuccess,
       streamStatusActive: streamStatus?.active,
       streamStatusStreamId: streamStatus?.streamId,
@@ -164,10 +168,11 @@ export default function useResumeOnLoad(
     // If there's a stale submission for a different conversation, log it but continue
     if (currentSubmission && submissionConvoId !== conversationId) {
       logger.debug(
-        '[ResumeOnLoad] Found stale submission for different conversation, will check for resume',
+        '[ResumeOnLoad] Found submission mismatch, will check whether route is already covered by current conversation state',
         {
           staleConvoId: submissionConvoId,
           currentConvoId: conversationId,
+          currentConversationId,
         },
       );
     }
@@ -240,6 +245,7 @@ export default function useResumeOnLoad(
     messagesLoaded,
     hasActiveSubmissionForThisConvo,
     submissionConvoId,
+    currentConversationId,
     currentSubmission,
     isSuccess,
     streamStatus,

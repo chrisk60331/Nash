@@ -34,6 +34,7 @@ type ChatHelpers = Pick<
   | 'getMessages'
   | 'setConversation'
   | 'setIsSubmitting'
+  | 'setSubmission'
   | 'newConversation'
   | 'resetLatestMessage'
 >;
@@ -56,6 +57,7 @@ export default function useSSE(
     getMessages,
     setConversation,
     setIsSubmitting,
+    setSubmission,
     newConversation,
     resetLatestMessage,
   } = chatHelpers;
@@ -78,6 +80,7 @@ export default function useSSE(
     isAddedRequest,
     setConversation,
     setIsSubmitting,
+    setSubmission,
     newConversation,
     setShowStopButton,
     resetLatestMessage,
