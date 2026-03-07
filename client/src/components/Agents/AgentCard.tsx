@@ -8,13 +8,14 @@ import AgentDetailContent from './AgentDetailContent';
 interface AgentCardProps {
   agent: t.Agent;
   onSelect?: (agent: t.Agent) => void;
+  onStartChat?: () => void;
   className?: string;
 }
 
 /**
  * Card component to display agent information with integrated detail dialog
  */
-const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, className = '' }) => {
+const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onStartChat, className = '' }) => {
   const localize = useLocalize();
   const { categories } = useAgentCategories();
   const [isOpen, setIsOpen] = useState(false);
@@ -114,7 +115,7 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, className = '' }
         </div>
       </OGDialogTrigger>
 
-      <AgentDetailContent agent={agent} />
+      <AgentDetailContent agent={agent} onStartChat={onStartChat} />
     </OGDialog>
   );
 };

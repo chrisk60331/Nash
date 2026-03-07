@@ -26,13 +26,14 @@ interface AgentWithSupport extends t.Agent {
 
 interface AgentDetailContentProps {
   agent: AgentWithSupport;
+  onStartChat?: () => void;
 }
 
 /**
  * Dialog content for displaying agent details
  * Used inside OGDialog with OGDialogTrigger for proper focus management
  */
-const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent }) => {
+const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent, onStartChat }) => {
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { showToast } = useToastContext();
@@ -83,6 +84,8 @@ const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent }) => {
         template: currentConvo,
         preset: template,
       });
+
+      onStartChat?.();
     }
   };
 

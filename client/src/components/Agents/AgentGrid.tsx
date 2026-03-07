@@ -13,6 +13,7 @@ interface AgentGridProps {
   category: string;
   searchQuery: string;
   onSelectAgent: (agent: t.Agent) => void;
+  onStartChat?: () => void;
   scrollElementRef?: React.RefObject<HTMLElement>;
 }
 
@@ -23,6 +24,7 @@ const AgentGrid: React.FC<AgentGridProps> = ({
   category,
   searchQuery,
   onSelectAgent,
+  onStartChat,
   scrollElementRef,
 }) => {
   const localize = useLocalize();
@@ -193,7 +195,7 @@ const AgentGrid: React.FC<AgentGridProps> = ({
             >
               {currentAgents.map((agent: t.Agent, index: number) => (
                 <div key={`${agent.id}-${index}`} role="gridcell">
-                  <AgentCard agent={agent} onSelect={onSelectAgent} />
+                  <AgentCard agent={agent} onSelect={onSelectAgent} onStartChat={onStartChat} />
                 </div>
               ))}
             </div>

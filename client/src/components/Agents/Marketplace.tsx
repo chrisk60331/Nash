@@ -397,6 +397,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
                       category={displayCategory}
                       searchQuery={searchQuery}
                       onSelectAgent={handleAgentSelect}
+                      onStartChat={isSmallScreen ? () => setNavVisible(false) : undefined}
                       scrollElementRef={scrollContainerRef}
                     />
                   </div>
@@ -477,6 +478,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
                         category={nextCategory}
                         searchQuery={searchQuery}
                         onSelectAgent={handleAgentSelect}
+                        onStartChat={isSmallScreen ? () => setNavVisible(false) : undefined}
                         scrollElementRef={scrollContainerRef}
                       />
                     </div>

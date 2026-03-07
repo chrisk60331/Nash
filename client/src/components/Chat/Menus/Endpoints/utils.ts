@@ -53,7 +53,7 @@ export function filterItems<
 
         if (isAssistantsEndpoint(item.value) && assistantsMap) {
           const endpoint = item.value ?? '';
-          const assistant = assistantsMap[endpoint][modelId.name];
+          const assistant = assistantsMap[endpoint]?.[modelId.name];
           if (assistant && typeof assistant.name === 'string') {
             return assistant.name.toLowerCase().includes(searchTermLower);
           }

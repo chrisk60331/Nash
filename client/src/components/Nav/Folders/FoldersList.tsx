@@ -73,7 +73,11 @@ function FolderItem({
   );
 }
 
-const FoldersList = memo(() => {
+interface FoldersListProps {
+  toggleNav?: () => void;
+}
+
+const FoldersList = memo(({ toggleNav }: FoldersListProps) => {
   const localize = useLocalize();
   const { newConversation } = useNewConvo();
   const [activeFolderId, setActiveFolderId] = useRecoilState(store.activeFolderId);
@@ -88,9 +92,10 @@ const FoldersList = memo(() => {
       setActiveFolderId(folderId);
       if (folderId) {
         newConversation({ template: { folderId } });
+        toggleNav?.();
       }
     },
-    [setActiveFolderId, newConversation],
+    [setActiveFolderId, newConversation, toggleNav],
   );
 
   const handleDeleteRequest = useCallback((folder: TFolder) => {

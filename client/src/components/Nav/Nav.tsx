@@ -248,7 +248,7 @@ const Nav = memo(
               isSmallScreen={isSmallScreen}
             />
             <FavoritesList isSmallScreen={isSmallScreen} toggleNav={itemToggleNav} />
-            <FoldersList />
+            <FoldersList toggleNav={itemToggleNav} />
             <div className="flex min-h-0 flex-grow flex-col overflow-hidden">
               <Conversations
                 conversations={conversations}
