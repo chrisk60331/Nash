@@ -234,6 +234,8 @@ def _format_convo(c: dict) -> dict:
 def _get_startup_config() -> dict:
     from api.config import settings
     from api.routes.config_routes import FREE_TIER_PROVIDERS
+    from api.services.org_security_service import get_org_security_config
+    org_security_config = get_org_security_config()
     return {
         "appTitle": settings.app_title,
         "socialLogins": ["google"],
@@ -257,6 +259,7 @@ def _get_startup_config() -> dict:
         "emailEnabled": False,
         "showBirthdayIcon": False,
         "helpAndFaqURL": settings.help_and_faq_url,
+        "requireMfaForAllUsers": org_security_config.requireMfaForAllUsers,
         "sharedLinksEnabled": settings.allow_shared_links,
         "publicSharedLinksEnabled": settings.allow_shared_links,
         "instanceProjectId": "nash-2",

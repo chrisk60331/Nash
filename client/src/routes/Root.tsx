@@ -18,7 +18,7 @@ import {
 } from '~/Providers';
 import { useUserTermsQuery, useGetStartupConfig, useInitQuery } from '~/data-provider';
 import { Nav, MobileNav, NAV_WIDTH } from '~/components/Nav';
-import { CookieConsentBanner, TermsGate } from '~/components/ui';
+import { CookieConsentBanner, MfaEnrollmentGate, TermsGate } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
 
@@ -29,7 +29,7 @@ export default function Root() {
     return savedNavVisible !== null ? JSON.parse(savedNavVisible) : true;
   });
 
-  const { isAuthenticated, logout } = useAuthContext();
+  const { isAuthenticated, logout, user } = useAuthContext();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
 
   useInitQuery({ enabled: isAuthenticated });
@@ -39,13 +39,25 @@ export default function Root() {
   const agentsMap = useAgentsMap({ isAuthenticated });
   const fileMap = useFileMap({ isAuthenticated });
 
-  useGetStartupConfig();
+  const { data: startupConfig } = useGetStartupConfig();
   const { data: termsData } = useUserTermsQuery({ enabled: isAuthenticated });
 
   useSearchEnabled(isAuthenticated);
 
   if (!isAuthenticated) {
     return null;
+  }
+
+  const requiresMfaEnrollment =
+    (user?.role ?? '').toUpperCase() === 'ADMIN' || startupConfig?.requireMfaForAllUsers === true;
+
+  if (requiresMfaEnrollment && user?.twoFactorEnabled !== true) {
+    return (
+      <MfaEnrollmentGate
+        onDecline={() => logout('/login?redirect=false')}
+        onCompleted={() => window.location.reload()}
+      />
+    );
   }
 
   // Block access until terms are explicitly accepted

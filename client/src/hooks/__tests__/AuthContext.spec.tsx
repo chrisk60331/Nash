@@ -188,4 +188,19 @@ describe('AuthContextProvider — login onError redirect handling', () => {
 
     expect(mockNavigate).not.toHaveBeenCalled();
   });
+
+  it('routes to MFA enrollment when login requires setup', () => {
+    renderProvider();
+
+    act(() => {
+      mockCapturedLoginOptions.onSuccess({
+        mfaSetupRequired: true,
+        tempToken: 'temp-setup-token',
+      });
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/login/mfa-enroll?tempToken=temp-setup-token', {
+      replace: true,
+    });
+  });
 });

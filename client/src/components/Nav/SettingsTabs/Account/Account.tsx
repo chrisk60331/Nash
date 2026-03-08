@@ -25,17 +25,13 @@ function Account() {
       <div className="pb-3">
         <ReferralPanel showRedeem={true} />
       </div>
-      {user?.provider === 'local' && (
-        <>
-          <div className="pb-3">
-            <EnableTwoFactorItem />
-          </div>
-          {user?.twoFactorEnabled && (
-            <div className="pb-3">
-              <BackupCodesItem />
-            </div>
-          )}
-        </>
+      <div className="pb-3">
+        <EnableTwoFactorItem />
+      </div>
+      {user?.twoFactorEnabled && (
+        <div className="pb-3">
+          <BackupCodesItem />
+        </div>
       )}
       <div className="pb-3">
         <DeleteAccount />

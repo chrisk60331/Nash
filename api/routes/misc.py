@@ -16,6 +16,7 @@ from api.services.user_service import (
     update_user_field,
 )
 from api.services.mcp_service import fetch_mcp_tools, mcp_tools_to_openai_format, strip_server_prefix
+from api.services.org_security_service import get_org_security_config, update_org_security_config
 
 misc_bp = Blueprint("misc", __name__)
 
@@ -593,6 +594,7 @@ def _format_admin_user(u: dict) -> dict:
         "username": u.get("username", ""),
         "avatar": u.get("avatar", ""),
         "role": u.get("role", "USER"),
+        "twoFactorEnabled": u.get("twoFactorEnabled", False),
         "provider": u.get("provider", ""),
         "createdAt": u.get("createdAt", ""),
     }
@@ -721,6 +723,31 @@ def admin_set_role():
 
     update_user_field(target, "role", new_role)
     return jsonify({"userId": target_user_id, "role": new_role})
+
+
+@misc_bp.route("/api/admin/security", methods=["GET"])
+@require_jwt
+def admin_get_security():
+    caller = find_user_by_id(g.user_id)
+    if not caller or caller.get("role", "").upper() != "ADMIN":
+        return jsonify({"error": "Forbidden"}), 403
+
+    config = get_org_security_config()
+    return jsonify(config.model_dump(mode="json"))
+
+
+@misc_bp.route("/api/admin/security", methods=["PATCH"])
+@require_jwt
+def admin_update_security():
+    caller = find_user_by_id(g.user_id)
+    if not caller or caller.get("role", "").upper() != "ADMIN":
+        return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json() or {}
+    updated = update_org_security_config(
+        require_mfa_for_all_users=bool(data.get("requireMfaForAllUsers", False))
+    )
+    return jsonify(updated.model_dump(mode="json"))
 
 
 # --------------- Favorites ---------------

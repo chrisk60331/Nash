@@ -13,9 +13,13 @@ async function _getResponse<T>(url: string, options?: AxiosRequestConfig): Promi
   return await axios.get(url, { ...options });
 }
 
-async function _post(url: string, data?: any) {
+async function _post(url: string, data?: any, options?: AxiosRequestConfig) {
   const response = await axios.post(url, JSON.stringify(data), {
-    headers: { 'Content-Type': 'application/json' },
+    ...options,
+    headers: {
+      ...(options?.headers ?? {}),
+      'Content-Type': 'application/json',
+    },
   });
   return response.data;
 }
@@ -37,15 +41,19 @@ async function _postTTS(url: string, formData: FormData, options?: AxiosRequestC
   return response.data;
 }
 
-async function _put(url: string, data?: any) {
+async function _put(url: string, data?: any, options?: AxiosRequestConfig) {
   const response = await axios.put(url, JSON.stringify(data), {
-    headers: { 'Content-Type': 'application/json' },
+    ...options,
+    headers: {
+      ...(options?.headers ?? {}),
+      'Content-Type': 'application/json',
+    },
   });
   return response.data;
 }
 
-async function _delete<T>(url: string): Promise<T> {
-  const response = await axios.delete(url);
+async function _delete<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
+  const response = await axios.delete(url, { ...options });
   return response.data;
 }
 
@@ -54,9 +62,13 @@ async function _deleteWithOptions<T>(url: string, options?: AxiosRequestConfig):
   return response.data;
 }
 
-async function _patch(url: string, data?: any) {
+async function _patch(url: string, data?: any, options?: AxiosRequestConfig) {
   const response = await axios.patch(url, JSON.stringify(data), {
-    headers: { 'Content-Type': 'application/json' },
+    ...options,
+    headers: {
+      ...(options?.headers ?? {}),
+      'Content-Type': 'application/json',
+    },
   });
   return response.data;
 }

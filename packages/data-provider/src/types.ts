@@ -428,6 +428,7 @@ export type TLoginResponse = {
   token?: string;
   user?: TUser;
   twoFAPending?: boolean;
+  mfaSetupRequired?: boolean;
   tempToken?: string;
 };
 
@@ -444,6 +445,8 @@ export type TVerify2FARequest = {
 
 export type TVerify2FAResponse = {
   message: string;
+  token?: string;
+  user?: TUser;
 };
 
 /**

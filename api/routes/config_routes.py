@@ -5,6 +5,7 @@ import tomllib
 from flask import Blueprint, jsonify
 
 from api.config import settings
+from api.services.org_security_service import get_org_security_config
 
 config_bp = Blueprint("config", __name__)
 
@@ -123,6 +124,7 @@ def _extract_model_entries(endpoint_config: dict) -> list[dict]:
 
 @config_bp.route("/api/config", methods=["GET"])
 def get_config():
+    org_security_config = get_org_security_config()
     return jsonify({
         "appTitle": settings.app_title,
         "socialLogins": ["google"],
@@ -148,6 +150,7 @@ def get_config():
         "helpAndFaqURL": settings.help_and_faq_url,
         "statusPageURL": settings.status_page_url,
         "supportURL": settings.support_url,
+        "requireMfaForAllUsers": org_security_config.requireMfaForAllUsers,
         "sharedLinksEnabled": settings.allow_shared_links,
         "publicSharedLinksEnabled": settings.allow_shared_links,
         "instanceProjectId": "nash-2",

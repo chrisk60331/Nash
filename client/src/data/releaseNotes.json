@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.14.0",
+    "title": "v2.14.0",
+    "publishedAt": "2026-03-08T21:00:00Z",
+    "body": "**Minor release — TOTP MFA enrollment and enforcement**\n\n- **Google Authenticator-compatible MFA:** add TOTP enrollment, QR setup, verification, disable flow, and single-use backup codes backed by the Flask API\n- **Login enforcement:** admins must enroll in MFA before accessing the app; users can enroll optionally by default, and the backend issues a short-lived temp token for login-time MFA verification\n- **Admin security policy:** new runtime admin setting to require MFA for all users later without a redeploy, stored in auth-assistant org security config and surfaced in User Management\n- **Frontend integration:** revive the dormant 2FA UI, expose it for social-login users too, add required enrollment screens/gates, and improve dark-mode readability during setup"
+  },
+  {
     "tagName": "v2.13.3",
     "title": "v2.13.3",
     "publishedAt": "2026-03-08T00:00:00Z",

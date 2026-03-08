@@ -9,7 +9,10 @@ from flask import Blueprint, request, redirect, jsonify, make_response
 from api.config import settings
 from api.middleware.jwt_auth import (
     create_access_token,
+    create_mfa_temp_token,
     create_refresh_token,
+    decode_access_token,
+    decode_mfa_temp_token,
     decode_refresh_token,
 )
 from api.middleware.rate_limit import limiter
@@ -17,6 +20,16 @@ from api.middleware.csrf import csrf_protect
 from api.services import audit_service
 from api.services import lockout_service
 from api.services.user_service import find_user_by_email, find_user_by_id, create_user, update_user_field, verify_password
+from api.services.mfa_service import (
+    build_otpauth_url,
+    generate_backup_codes,
+    generate_totp_secret,
+    hash_backup_codes,
+    mfa_requirement_for_user,
+    validate_backup_code,
+    verify_totp,
+)
+from api.services.org_security_service import get_org_security_config
 from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
 from api.services.referral_service import (
@@ -106,6 +119,132 @@ def _ensure_bb_assistant(user: dict) -> str:
     return existing
 
 
+def _backup_codes_for_client(user: dict) -> list[dict]:
+    return [
+        {
+            "codeHash": record.get("codeHash", ""),
+            "used": record.get("used", False),
+            "usedAt": record.get("usedAt"),
+        }
+        for record in (user.get("backupCodes") or [])
+        if isinstance(record, dict)
+    ]
+
+
+def _serialize_user(user: dict) -> dict:
+    return {
+        "id": user["id"],
+        "email": user.get("email", ""),
+        "name": user.get("name", ""),
+        "username": user.get("username", ""),
+        "avatar": user.get("avatar", ""),
+        "provider": user.get("provider", ""),
+        "role": user.get("role", "USER"),
+        "twoFactorEnabled": user.get("twoFactorEnabled", False),
+        "backupCodes": _backup_codes_for_client(user),
+        "createdAt": user.get("createdAt", ""),
+        "updatedAt": user.get("updatedAt", ""),
+    }
+
+
+def _set_refresh_cookie(response, refresh_token: str) -> None:
+    response.set_cookie(
+        "refreshToken",
+        refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="Lax",
+        max_age=settings.jwt_refresh_expiry_seconds,
+        path="/",
+    )
+
+
+def _mfa_required_for_user(user: dict) -> bool:
+    org_config = get_org_security_config()
+    return mfa_requirement_for_user(
+        user.get("role", "USER"),
+        org_config.requireMfaForAllUsers,
+    ) == "required"
+
+
+def _issue_full_auth_response(user: dict):
+    user_id = user["id"]
+    access_token = create_access_token(user_id)
+    refresh_token = create_refresh_token(user_id)
+    audit_service.emit("auth.login.success", user_id=user_id)
+    response = make_response(jsonify({"token": access_token, "user": _serialize_user(user)}))
+    _set_refresh_cookie(response, refresh_token)
+    return response
+
+
+def _issue_mfa_temp_response(user: dict, *, purpose: str):
+    temp_token = create_mfa_temp_token(user["id"], purpose=purpose)
+    if purpose == "verify":
+        audit_service.emit("auth.mfa.challenge_issued", user_id=user["id"])
+        return jsonify({"twoFAPending": True, "tempToken": temp_token})
+    audit_service.emit("auth.mfa.enrollment_required", user_id=user["id"], role=user.get("role", "USER"))
+    return jsonify({"mfaSetupRequired": True, "tempToken": temp_token})
+
+
+def _build_oauth_redirect(path: str):
+    redirect_url = f"{settings.domain_client}{path}"
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>SSO Login</title></head>
+<body>
+<script>
+  window.location.replace("{redirect_url}");
+</script>
+<noscript><a href="{redirect_url}">Continue</a></noscript>
+</body></html>"""
+    return make_response(html)
+
+
+def _resolve_2fa_subject(*, allow_temp: bool = False, required_purpose: str | None = None):
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None, False, None, (jsonify({"error": "Missing or invalid authorization header"}), 401)
+
+    token = auth_header[7:]
+    payload = None
+    is_temp_token = False
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        if not allow_temp:
+            return None, False, None, (jsonify({"error": "Invalid token"}), 401)
+        try:
+            payload = decode_mfa_temp_token(token)
+            is_temp_token = True
+        except Exception:
+            return None, False, None, (jsonify({"error": "Invalid token"}), 401)
+
+    if is_temp_token and required_purpose and payload.get("purpose") != required_purpose:
+        return None, False, payload, (jsonify({"error": "Invalid MFA session"}), 403)
+
+    user_id = payload.get("sub")
+    if not user_id:
+        return None, False, payload, (jsonify({"error": "User not found"}), 404)
+
+    user = find_user_by_id(user_id)
+    if not user:
+        return None, False, payload, (jsonify({"error": "User not found"}), 404)
+
+    return user, is_temp_token, payload, None
+
+
+def _validate_active_factor(user: dict, *, token: str | None = None, backup_code: str | None = None) -> bool:
+    if token and verify_totp(user.get("totpSecret", ""), token.strip()):
+        return True
+
+    if backup_code:
+        result = validate_backup_code(user.get("backupCodes", []), backup_code)
+        if result.valid:
+            update_user_field(user, "backupCodes", [record.model_dump(mode="json") for record in result.records])
+            audit_service.emit("auth.mfa.backup_code_used", user_id=user["id"])
+            return True
+
+    return False
+
+
 @auth_bp.route("/api/auth/login", methods=["POST"])
 @limiter.limit("10 per minute")
 def login():
@@ -150,35 +289,13 @@ def login():
     lockout_service.record_success(email)
     _ensure_bb_assistant(user)
 
-    user_id = user["id"]
-    access_token = create_access_token(user_id)
-    refresh_token = create_refresh_token(user_id)
+    if user.get("twoFactorEnabled"):
+        return _issue_mfa_temp_response(user, purpose="verify")
 
-    audit_service.emit("auth.login.success", user_id=user_id)
+    if _mfa_required_for_user(user):
+        return _issue_mfa_temp_response(user, purpose="enroll")
 
-    user_data = {
-        "id": user["id"],
-        "email": user.get("email", ""),
-        "name": user.get("name", ""),
-        "username": user.get("username", ""),
-        "avatar": user.get("avatar", ""),
-        "provider": user.get("provider", ""),
-        "role": user.get("role", "USER"),
-        "createdAt": user.get("createdAt", ""),
-        "updatedAt": user.get("updatedAt", ""),
-    }
-
-    response = make_response(jsonify({"token": access_token, "user": user_data}))
-    response.set_cookie(
-        "refreshToken",
-        refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="Lax",
-        max_age=settings.jwt_refresh_expiry_seconds,
-        path="/",
-    )
-    return response
+    return _issue_full_auth_response(user)
 
 
 @auth_bp.route("/api/auth/register", methods=["POST"])
@@ -238,15 +355,175 @@ def register():
     refresh_token = create_refresh_token(user["id"])
 
     response = make_response(jsonify({"message": "Registration successful"}))
-    response.set_cookie(
-        "refreshToken",
-        refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="Lax",
-        max_age=settings.jwt_refresh_expiry_seconds,
-        path="/",
+    _set_refresh_cookie(response, refresh_token)
+    return response
+
+
+@auth_bp.route("/api/auth/2fa/enable", methods=["GET"])
+def enable_two_factor():
+    user, _is_temp_token, _payload, error_response = _resolve_2fa_subject(
+        allow_temp=True,
+        required_purpose="enroll",
     )
+    if error_response:
+        return error_response
+    if user.get("twoFactorEnabled"):
+        return jsonify({"message": "Two-factor authentication is already enabled"}), 400
+
+    secret = generate_totp_secret()
+    backup_codes = generate_backup_codes()
+    pending_backup_codes = [record.model_dump(mode="json") for record in hash_backup_codes(backup_codes)]
+    update_user_field(user, "pendingTotpSecret", secret)
+    update_user_field(user, "pendingBackupCodes", pending_backup_codes)
+    audit_service.emit("auth.mfa.setup_started", user_id=user["id"])
+    return jsonify({
+        "otpauthUrl": build_otpauth_url(
+            secret=secret,
+            issuer=settings.app_title,
+            account_name=user.get("email", user["id"]),
+        ),
+        "backupCodes": backup_codes,
+    })
+
+
+@auth_bp.route("/api/auth/2fa/verify", methods=["POST"])
+def verify_two_factor():
+    user, _is_temp_token, _payload, error_response = _resolve_2fa_subject(
+        allow_temp=True,
+        required_purpose="enroll",
+    )
+    if error_response:
+        return error_response
+
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    pending_secret = user.get("pendingTotpSecret", "")
+    if not pending_secret:
+        return jsonify({"message": "No pending MFA enrollment"}), 400
+    if not verify_totp(pending_secret, token):
+        audit_service.emit("auth.mfa.verify.failure", result="fail", user_id=user["id"])
+        return jsonify({"message": "Invalid authentication code"}), 400
+
+    audit_service.emit("auth.mfa.verify.success", user_id=user["id"])
+    return jsonify({"message": "Authentication code verified"})
+
+
+@auth_bp.route("/api/auth/2fa/confirm", methods=["POST"])
+def confirm_two_factor():
+    user, is_temp_token, _payload, error_response = _resolve_2fa_subject(
+        allow_temp=True,
+        required_purpose="enroll",
+    )
+    if error_response:
+        return error_response
+
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    pending_secret = user.get("pendingTotpSecret", "")
+    pending_backup_codes = user.get("pendingBackupCodes", [])
+    if not pending_secret or not pending_backup_codes:
+        return jsonify({"message": "No pending MFA enrollment"}), 400
+    if not verify_totp(pending_secret, token):
+        audit_service.emit("auth.mfa.confirm.failure", result="fail", user_id=user["id"])
+        return jsonify({"message": "Invalid authentication code"}), 400
+
+    update_user_field(user, "totpSecret", pending_secret)
+    update_user_field(user, "backupCodes", pending_backup_codes)
+    update_user_field(user, "twoFactorEnabled", True)
+    update_user_field(user, "pendingTotpSecret", "")
+    update_user_field(user, "pendingBackupCodes", [])
+    audit_service.emit("auth.mfa.enabled", user_id=user["id"])
+
+    if is_temp_token:
+        access_token = create_access_token(user["id"])
+        refresh_token = create_refresh_token(user["id"])
+        response = make_response(jsonify({
+            "message": "Two-factor authentication enabled",
+            "token": access_token,
+            "user": _serialize_user(user),
+        }))
+        _set_refresh_cookie(response, refresh_token)
+        return response
+
+    return jsonify({"message": "Two-factor authentication enabled"})
+
+
+@auth_bp.route("/api/auth/2fa/disable", methods=["POST"])
+def disable_two_factor():
+    user, _is_temp_token, _payload, error_response = _resolve_2fa_subject()
+    if error_response:
+        return error_response
+
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip() or None
+    backup_code = (data.get("backupCode") or "").strip() or None
+    if not _validate_active_factor(user, token=token, backup_code=backup_code):
+        audit_service.emit("auth.mfa.disable.failure", result="fail", user_id=user["id"])
+        return jsonify({"message": "Invalid authentication code"}), 400
+
+    update_user_field(user, "twoFactorEnabled", False)
+    update_user_field(user, "totpSecret", "")
+    update_user_field(user, "backupCodes", [])
+    update_user_field(user, "pendingTotpSecret", "")
+    update_user_field(user, "pendingBackupCodes", [])
+    audit_service.emit("auth.mfa.disabled", user_id=user["id"])
+    return jsonify({"message": "Two-factor authentication disabled"})
+
+
+@auth_bp.route("/api/auth/2fa/backup/regenerate", methods=["POST"])
+def regenerate_backup_codes():
+    user, _is_temp_token, _payload, error_response = _resolve_2fa_subject()
+    if error_response:
+        return error_response
+    if not user.get("twoFactorEnabled"):
+        return jsonify({"message": "Two-factor authentication is not enabled"}), 400
+
+    backup_codes = generate_backup_codes()
+    hashed_codes = [record.model_dump(mode="json") for record in hash_backup_codes(backup_codes)]
+    update_user_field(user, "backupCodes", hashed_codes)
+    audit_service.emit("auth.mfa.backup_codes_regenerated", user_id=user["id"])
+    return jsonify({
+        "message": "Backup codes regenerated",
+        "backupCodes": backup_codes,
+        "backupCodesHash": [record["codeHash"] for record in hashed_codes],
+    })
+
+
+@auth_bp.route("/api/auth/2fa/verify-temp", methods=["POST"])
+def verify_two_factor_temp():
+    data = request.get_json(silent=True) or {}
+    temp_token = (data.get("tempToken") or "").strip()
+    token = (data.get("token") or "").strip() or None
+    backup_code = (data.get("backupCode") or "").strip() or None
+    if not temp_token:
+        return jsonify({"message": "Temporary token is required"}), 400
+
+    try:
+        payload = decode_mfa_temp_token(temp_token)
+    except Exception:
+        return jsonify({"message": "Invalid temporary token"}), 401
+
+    if payload.get("purpose") != "verify":
+        return jsonify({"message": "Invalid temporary token"}), 403
+
+    user = find_user_by_id(payload.get("sub", ""))
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    if not user.get("twoFactorEnabled"):
+        return jsonify({"message": "Two-factor authentication is not enabled"}), 400
+    if not _validate_active_factor(user, token=token, backup_code=backup_code):
+        audit_service.emit("auth.mfa.challenge_failed", result="fail", user_id=user["id"])
+        return jsonify({"message": "Invalid authentication code"}), 400
+
+    access_token = create_access_token(user["id"])
+    refresh_token = create_refresh_token(user["id"])
+    audit_service.emit("auth.mfa.challenge_completed", user_id=user["id"])
+    response = make_response(jsonify({
+        "token": access_token,
+        "user": _serialize_user(user),
+        "message": "Authentication complete",
+    }))
+    _set_refresh_cookie(response, refresh_token)
     return response
 
 
@@ -340,17 +617,23 @@ def oauth_google_callback():
         except ValueError:
             logger.warning("[auth] ignored invalid promo code during google login for %s", email)
 
-    user_id = user["id"]
-    access_token = create_access_token(user_id)
-    refresh_token = create_refresh_token(user_id)
-
     audit_service.emit(
         "auth.oauth.success",
-        user_id=user_id,
+        user_id=user["id"],
         provider="google",
         new_user=is_new_user,
     )
 
+    if user.get("twoFactorEnabled"):
+        temp_token = create_mfa_temp_token(user["id"], purpose="verify")
+        return _build_oauth_redirect(f"/login/2fa?tempToken={temp_token}")
+
+    if _mfa_required_for_user(user):
+        temp_token = create_mfa_temp_token(user["id"], purpose="enroll")
+        return _build_oauth_redirect(f"/login/mfa-enroll?tempToken={temp_token}")
+
+    access_token = create_access_token(user["id"])
+    refresh_token = create_refresh_token(user["id"])
     redirect_url = f"{settings.domain_client}/c/new"
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>SSO Login</title></head>
 <body>
@@ -362,15 +645,7 @@ def oauth_google_callback():
 </body></html>"""
 
     response = make_response(html)
-    response.set_cookie(
-        "refreshToken",
-        refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="Lax",
-        max_age=settings.jwt_refresh_expiry_seconds,
-        path="/",
-    )
+    _set_refresh_cookie(response, refresh_token)
     return response
 
 
@@ -398,32 +673,12 @@ def refresh():
     user = find_user_by_id(user_id)
     if user:
         _ensure_bb_assistant(user)
-    user_data = None
-    if user:
-        user_data = {
-            "id": user["id"],
-            "email": user.get("email", ""),
-            "name": user.get("name", ""),
-            "username": user.get("username", ""),
-            "avatar": user.get("avatar", ""),
-            "provider": user.get("provider", ""),
-            "role": user.get("role", "USER"),
-            "createdAt": user.get("createdAt", ""),
-            "updatedAt": user.get("updatedAt", ""),
-        }
+    user_data = _serialize_user(user) if user else None
 
     audit_service.emit("auth.refresh.success", user_id=user_id)
 
     response = make_response(jsonify({"token": new_access_token, "user": user_data}))
-    response.set_cookie(
-        "refreshToken",
-        new_refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="Lax",
-        max_age=settings.jwt_refresh_expiry_seconds,
-        path="/",
-    )
+    _set_refresh_cookie(response, new_refresh_token)
     return response
 
 

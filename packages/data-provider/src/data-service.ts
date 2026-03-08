@@ -995,24 +995,52 @@ export function updateFeedback(
 }
 
 // 2FA
-export function enableTwoFactor(): Promise<t.TEnable2FAResponse> {
-  return request.get(endpoints.enableTwoFactor());
+const authHeader = (authToken?: string) =>
+  authToken != null && authToken !== '' ? { Authorization: `Bearer ${authToken}` } : undefined;
+
+export function enableTwoFactor(authToken?: string): Promise<t.TEnable2FAResponse> {
+  return request.get(endpoints.enableTwoFactor(), authToken ? { headers: authHeader(authToken) } : undefined);
 }
 
-export function verifyTwoFactor(payload: t.TVerify2FARequest): Promise<t.TVerify2FAResponse> {
-  return request.post(endpoints.verifyTwoFactor(), payload);
+export function verifyTwoFactor(
+  payload: t.TVerify2FARequest,
+  authToken?: string,
+): Promise<t.TVerify2FAResponse> {
+  return request.post(
+    endpoints.verifyTwoFactor(),
+    payload,
+    authToken ? { headers: authHeader(authToken) } : undefined,
+  );
 }
 
-export function confirmTwoFactor(payload: t.TVerify2FARequest): Promise<t.TVerify2FAResponse> {
-  return request.post(endpoints.confirmTwoFactor(), payload);
+export function confirmTwoFactor(
+  payload: t.TVerify2FARequest,
+  authToken?: string,
+): Promise<t.TVerify2FAResponse> {
+  return request.post(
+    endpoints.confirmTwoFactor(),
+    payload,
+    authToken ? { headers: authHeader(authToken) } : undefined,
+  );
 }
 
-export function disableTwoFactor(payload?: t.TDisable2FARequest): Promise<t.TDisable2FAResponse> {
-  return request.post(endpoints.disableTwoFactor(), payload);
+export function disableTwoFactor(
+  payload?: t.TDisable2FARequest,
+  authToken?: string,
+): Promise<t.TDisable2FAResponse> {
+  return request.post(
+    endpoints.disableTwoFactor(),
+    payload,
+    authToken ? { headers: authHeader(authToken) } : undefined,
+  );
 }
 
-export function regenerateBackupCodes(): Promise<t.TRegenerateBackupCodesResponse> {
-  return request.post(endpoints.regenerateBackupCodes());
+export function regenerateBackupCodes(authToken?: string): Promise<t.TRegenerateBackupCodesResponse> {
+  return request.post(
+    endpoints.regenerateBackupCodes(),
+    undefined,
+    authToken ? { headers: authHeader(authToken) } : undefined,
+  );
 }
 
 export function verifyTwoFactorTemp(
@@ -1166,6 +1194,7 @@ export interface AdminUser {
   email: string;
   username: string;
   role: string;
+  twoFactorEnabled?: boolean;
   provider: string;
   createdAt: string | null;
 }
@@ -1211,9 +1240,23 @@ export interface SetRoleResponse {
   role: string;
 }
 
+export interface AdminSecuritySettingsResponse {
+  requireMfaForAllUsers: boolean;
+}
+
 export const setAdminUserRole = (
   userId: string,
   role: string,
 ): Promise<SetRoleResponse> => {
   return request.patch(endpoints.adminSetRole(), { userId, role });
+};
+
+export const getAdminSecuritySettings = (): Promise<AdminSecuritySettingsResponse> => {
+  return request.get(endpoints.adminSecurity());
+};
+
+export const updateAdminSecuritySettings = (
+  data: AdminSecuritySettingsResponse,
+): Promise<AdminSecuritySettingsResponse> => {
+  return request.patch(endpoints.adminSecurity(), data);
 };

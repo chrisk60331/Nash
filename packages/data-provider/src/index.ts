@@ -45,6 +45,7 @@ export type {
   AdminUser,
   AdminUsersResponse,
   AdminSubscription,
+  AdminSecuritySettingsResponse,
   SetRoleResponse,
 } from './data-service';
 /* general helpers */

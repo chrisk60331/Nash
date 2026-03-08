@@ -438,3 +438,4 @@ export const adminUsers = (q?: string) =>
 export const adminUserSubscription = (userId: string) =>
   `${BASE_URL}/api/admin/users/${userId}/subscription`;
 export const adminSetRole = () => `${BASE_URL}/api/admin/users/set-role`;
+export const adminSecurity = () => `${BASE_URL}/api/admin/security`;

@@ -41,7 +41,7 @@ export const VerifyPhase: React.FC<VerifyPhaseProps> = ({
           onChange={onTokenChange}
           maxLength={6}
           pattern={REGEXP_ONLY_DIGITS}
-          className="gap-2"
+          className="gap-2 text-text-primary dark:text-text-primary"
         >
           <InputOTPGroup>
             {Array.from({ length: 3 }).map((_, i) => (

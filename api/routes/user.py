@@ -44,6 +44,8 @@ def get_user():
         "avatar": user.get("avatar", ""),
         "provider": user.get("provider", ""),
         "role": user.get("role", "USER"),
+        "twoFactorEnabled": user.get("twoFactorEnabled", False),
+        "backupCodes": user.get("backupCodes", []),
         "createdAt": user.get("createdAt", ""),
         "updatedAt": user.get("updatedAt", ""),
     })

@@ -13,7 +13,7 @@ import {
 import { Dialog, DialogPanel, Transition, TransitionChild } from '@headlessui/react';
 import { QueryKeys, dataService } from 'librechat-data-provider';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { AdminUser, AdminSubscription } from 'librechat-data-provider';
+import type { AdminUser, AdminSubscription, AdminSecuritySettingsResponse } from 'librechat-data-provider';
 import type { TDialogProps } from '~/common';
 import { useCreateAdminPromoCode, useGetAdminPromoCodes } from '~/data-provider';
 import { cn } from '~/utils';
@@ -549,6 +549,7 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
   const [search, setSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('users');
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery(
     [QueryKeys.adminUsers, search],
@@ -557,6 +558,28 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
       staleTime: 15_000,
       keepPreviousData: true,
       enabled: open,
+    },
+  );
+
+  const { data: securitySettings } = useQuery<AdminSecuritySettingsResponse>(
+    ['admin-security-settings'],
+    () => dataService.getAdminSecuritySettings(),
+    {
+      staleTime: 15_000,
+      enabled: open,
+    },
+  );
+
+  const securityMutation = useMutation(
+    (requireMfaForAllUsers: boolean) =>
+      dataService.updateAdminSecuritySettings({ requireMfaForAllUsers }),
+    {
+      onSuccess: (updated) => {
+        queryClient.setQueryData(['admin-security-settings'], updated);
+        queryClient.setQueryData([QueryKeys.startupConfig], (current: Record<string, unknown> | undefined) =>
+          current != null ? { ...current, requireMfaForAllUsers: updated.requireMfaForAllUsers } : current,
+        );
+      },
     },
   );
 
@@ -642,6 +665,39 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                         )}
                       </button>
                     ))}
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-border-light bg-surface-secondary/40 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-text-primary">Require MFA for all users</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                          Admins are always required. Turn this on to require TOTP enrollment for every account.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          securityMutation.mutate(!(securitySettings?.requireMfaForAllUsers ?? false))
+                        }
+                        disabled={securityMutation.isLoading}
+                        className={cn(
+                          'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                          securitySettings?.requireMfaForAllUsers
+                            ? 'bg-green-600'
+                            : 'bg-surface-tertiary',
+                        )}
+                        aria-pressed={securitySettings?.requireMfaForAllUsers ?? false}
+                        aria-label="Require MFA for all users"
+                      >
+                        <span
+                          className={cn(
+                            'inline-block h-5 w-5 transform rounded-full bg-white transition-transform',
+                            securitySettings?.requireMfaForAllUsers ? 'translate-x-5' : 'translate-x-1',
+                          )}
+                        />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

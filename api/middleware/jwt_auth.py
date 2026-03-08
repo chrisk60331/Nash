@@ -29,12 +29,30 @@ def create_refresh_token(user_id: str) -> str:
     return jwt.encode(payload, settings.jwt_refresh_secret, algorithm="HS256")
 
 
+def create_mfa_temp_token(user_id: str, *, purpose: str) -> str:
+    payload = {
+        "sub": user_id,
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
+        "type": "mfa_temp",
+        "purpose": purpose,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
+
 def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
 
 
 def decode_refresh_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_refresh_secret, algorithms=["HS256"])
+
+
+def decode_mfa_temp_token(token: str) -> dict:
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    if payload.get("type") != "mfa_temp":
+        raise jwt.InvalidTokenError("Invalid MFA temp token")
+    return payload
 
 
 def require_jwt(f):
