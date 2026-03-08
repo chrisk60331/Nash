@@ -100,7 +100,8 @@ function Login() {
   }
 
   return (
-    <>
+    <div className="relative">
+      <ReferralPanel variant="login" className="fixed right-4 top-4 z-50" />
       {error != null && <ErrorMessage>{localize(getLoginError(error))}</ErrorMessage>}
       {startupConfig?.emailLoginEnabled === true && (
         <LoginForm
@@ -122,10 +123,7 @@ function Login() {
           </a>
         </p>
       )}
-      <div className="mt-6">
-        <ReferralPanel variant="login" />
-      </div>
-    </>
+    </div>
   );
 }
 

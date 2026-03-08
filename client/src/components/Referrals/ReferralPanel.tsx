@@ -37,6 +37,7 @@ export default function ReferralPanel({
   });
   const redeemMutation = useRedeemReferralOrPromoCode();
   const [code, setCode] = useState('');
+  const [badgeOpen, setBadgeOpen] = useState(false);
 
   const rewardUsd = data?.rewardUsd ?? startupConfig?.referrals?.rewardUsd ?? 5;
   const registerHref = useMemo(() => {
@@ -100,6 +101,63 @@ export default function ReferralPanel({
   if (!isAuthenticated) {
     if (variant === 'header') {
       return null;
+    }
+    if (variant === 'login') {
+      return (
+        <div className={cn('flex flex-col items-end', className)}>
+          <button
+            type="button"
+            onClick={() => setBadgeOpen((prev) => !prev)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-200',
+              badgeOpen
+                ? 'border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-400'
+                : 'border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-400',
+            )}
+          >
+            <Gift className="h-3.5 w-3.5" />
+            Earn ${rewardUsd.toFixed(0)} per referral
+          </button>
+          <Transition
+            as={Fragment}
+            show={badgeOpen}
+            enter="transition ease-out duration-200"
+            enterFrom="opacity-0 -translate-y-1 scale-95"
+            enterTo="opacity-100 translate-y-0 scale-100"
+            leave="transition ease-in duration-150"
+            leaveFrom="opacity-100 translate-y-0 scale-100"
+            leaveTo="opacity-0 -translate-y-1 scale-95"
+          >
+            <div className="mt-2 w-72 origin-top-right rounded-2xl border border-violet-500/20 bg-gradient-to-br from-amber-500/8 via-background to-violet-500/8 p-4 shadow-lg backdrop-blur-sm">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-violet-500/15 p-2 text-violet-500">
+                  <Gift className="h-4 w-4" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-text-primary">Referral rewards</p>
+                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      ${rewardUsd.toFixed(2)} / referral
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-text-secondary">
+                    Invite friends once you&apos;re in. Earn token credits when a referral upgrades to a paid account.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <a
+                  href={registerHref}
+                  className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-violet-700"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Start sharing invites
+                </a>
+              </div>
+            </div>
+          </Transition>
+        </div>
+      );
     }
     return (
       <div className={cn(shellClassName, className)}>
