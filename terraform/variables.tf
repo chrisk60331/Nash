@@ -221,3 +221,17 @@ variable "backboard_auth_assistant_id" {
   type        = string
   description = "Backboard assistant ID for the auth store (users, sessions, tokens)."
 }
+
+# --- Monitoring ---
+
+variable "log_retention_days" {
+  type        = number
+  description = "CloudWatch log retention in days."
+  default     = 90
+}
+
+variable "alarm_email" {
+  type        = string
+  description = "Email address for CloudWatch alarm notifications. Leave empty to skip."
+  default     = ""
+}

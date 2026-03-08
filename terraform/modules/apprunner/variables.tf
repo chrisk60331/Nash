@@ -105,3 +105,15 @@ variable "custom_domain" {
   description = "Custom domain to associate with the App Runner service (e.g. nash.backboard.io). Leave empty to skip."
   default     = ""
 }
+
+variable "log_retention_days" {
+  type        = number
+  description = "CloudWatch log retention in days."
+  default     = 90
+}
+
+variable "alarm_email" {
+  type        = string
+  description = "Email address to receive CloudWatch alarm notifications. Leave empty to skip alarms."
+  default     = ""
+}

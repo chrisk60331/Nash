@@ -1,5 +1,6 @@
 import { useForm } from 'react-hook-form';
 import React, { useContext, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Turnstile } from '@marsidev/react-turnstile';
 import { ThemeContext, Spinner, Button, isDark } from '@librechat/client';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
@@ -233,6 +234,17 @@ const Registration: React.FC = () => {
             >
               {localize('com_auth_login')}
             </a>
+          </p>
+          <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+            By creating an account, you agree to our{' '}
+            <Link to="/terms" className="text-green-600 hover:underline dark:text-green-400">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link to="/privacy" className="text-green-600 hover:underline dark:text-green-400">
+              Privacy Policy
+            </Link>
+            .
           </p>
         </>
       )}

@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     app_title: str = "Nash"
     domain_client: str = "http://localhost:3090"
     domain_server: str = "http://localhost:3080"
-    help_and_faq_url: str = "https://nash.backboard.io"
+    help_and_faq_url: str = "/docs"
+    status_page_url: str = "https://crimson-rabbit-6111.statusgator.app"
+    support_url: str = "mailto:support@backboard.io"
     allow_email_login: bool = True
     allow_registration: bool = True
     allow_social_login: bool = True

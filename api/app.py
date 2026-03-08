@@ -1,9 +1,13 @@
+import json
 import os
 
-from flask import Flask, send_from_directory
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
+from werkzeug.exceptions import TooManyRequests
 
 from api.config import settings
+from api.middleware.rate_limit import limiter
+from api.services import audit_service
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "client", "dist")
 
@@ -16,6 +20,7 @@ def create_app() -> Flask:
     app = Flask(__name__)
     logging.info("app created")
     app.secret_key = settings.jwt_secret
+    limiter.init_app(app)
     logging.info("secret key set")
     CORS(app, supports_credentials=True, origins=[
         settings.domain_client,
@@ -43,6 +48,28 @@ def create_app() -> Flask:
     from api.routes.init import init_bp
     from api.routes.referrals import referrals_bp
     logging.info("routes imported")
+
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        audit_service.emit(
+            "rate_limit.exceeded",
+            result="blocked",
+            limit=str(getattr(e, "description", "")),
+        )
+        return jsonify({"message": "Too many requests. Please slow down and try again."}), 429
+
+    @app.after_request
+    def log_server_errors(response):
+        if response.status_code >= 500:
+            from flask import request as req
+            audit_service.emit(
+                "http.error",
+                result="fail",
+                status_code=response.status_code,
+                path=req.path,
+                method=req.method,
+            )
+        return response
     app.register_blueprint(config_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(user_bp)

@@ -22,6 +22,10 @@ import Search from './Search';
 import BillingRoute from './BillingRoute';
 import Root from './Root';
 import SettingsRoute from './SettingsRoute';
+import Privacy from './Privacy';
+import Terms from './Terms';
+import Cookies from './Cookies';
+import Docs from './Docs';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -35,6 +39,26 @@ const baseHref = baseEl?.getAttribute('href') || '/';
 
 export const router = createBrowserRouter(
   [
+    {
+      path: 'docs',
+      element: <Docs />,
+      errorElement: <RouteErrorBoundary />,
+    },
+    {
+      path: 'privacy',
+      element: <Privacy />,
+      errorElement: <RouteErrorBoundary />,
+    },
+    {
+      path: 'terms',
+      element: <Terms />,
+      errorElement: <RouteErrorBoundary />,
+    },
+    {
+      path: 'cookies',
+      element: <Cookies />,
+      errorElement: <RouteErrorBoundary />,
+    },
     {
       path: 'share/:shareId',
       element: <ShareRoute />,

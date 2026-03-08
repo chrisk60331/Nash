@@ -117,8 +117,162 @@ resource "aws_apprunner_service" "this" {
 # --- Custom Domain ---
 
 resource "aws_apprunner_custom_domain_association" "this" {
-  count                          = var.custom_domain != "" ? 1 : 0
-  domain_name                    = var.custom_domain
-  service_arn                    = aws_apprunner_service.this.arn
+  count                = var.custom_domain != "" ? 1 : 0
+  domain_name          = var.custom_domain
+  service_arn          = aws_apprunner_service.this.arn
   enable_www_subdomain = false
+}
+
+# --- CloudWatch: Log retention ---
+# App Runner creates this log group automatically on first deploy.
+# Terraform adopts it here to enforce the retention policy.
+
+resource "aws_cloudwatch_log_group" "application" {
+  name              = "/aws/apprunner/${local.service_name}/${aws_apprunner_service.this.service_id}/application"
+  retention_in_days = var.log_retention_days
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# --- CloudWatch: SNS topic for alerts (conditional) ---
+
+resource "aws_sns_topic" "alerts" {
+  count = var.alarm_email != "" ? 1 : 0
+  name  = "${local.service_name}-alerts"
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  count     = var.alarm_email != "" ? 1 : 0
+  topic_arn = aws_sns_topic.alerts[0].arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
+}
+
+# --- CloudWatch: Metric filters (JSON audit log events) ---
+
+resource "aws_cloudwatch_log_metric_filter" "login_failures" {
+  name           = "${local.service_name}-login-failures"
+  log_group_name = aws_cloudwatch_log_group.application.name
+  pattern        = "{ $.event = \"auth.login.failure\" }"
+
+  metric_transformation {
+    name          = "LoginFailures"
+    namespace     = "Nash/${var.environment}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "rate_limit_blocks" {
+  name           = "${local.service_name}-rate-limit-blocks"
+  log_group_name = aws_cloudwatch_log_group.application.name
+  pattern        = "{ $.event = \"rate_limit.exceeded\" }"
+
+  metric_transformation {
+    name          = "RateLimitBlocks"
+    namespace     = "Nash/${var.environment}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "server_errors" {
+  name           = "${local.service_name}-server-errors"
+  log_group_name = aws_cloudwatch_log_group.application.name
+  pattern        = "{ $.event = \"http.error\" }"
+
+  metric_transformation {
+    name          = "ServerErrors"
+    namespace     = "Nash/${var.environment}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "account_lockouts" {
+  name           = "${local.service_name}-account-lockouts"
+  log_group_name = aws_cloudwatch_log_group.application.name
+  pattern        = "{ $.event = \"auth.login.locked\" }"
+
+  metric_transformation {
+    name          = "AccountLockouts"
+    namespace     = "Nash/${var.environment}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# --- CloudWatch: Alarms (conditional on alarm_email) ---
+
+resource "aws_cloudwatch_metric_alarm" "login_failures" {
+  count               = var.alarm_email != "" ? 1 : 0
+  alarm_name          = "${local.service_name}-high-login-failures"
+  alarm_description   = "≥10 login failures in 5 minutes — possible brute force or credential stuffing"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "LoginFailures"
+  namespace           = "Nash/${var.environment}"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 10
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  ok_actions          = [aws_sns_topic.alerts[0].arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "rate_limit_blocks" {
+  count               = var.alarm_email != "" ? 1 : 0
+  alarm_name          = "${local.service_name}-high-rate-limit-blocks"
+  alarm_description   = "≥20 rate limit blocks in 5 minutes — possible DoS"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "RateLimitBlocks"
+  namespace           = "Nash/${var.environment}"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 20
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  ok_actions          = [aws_sns_topic.alerts[0].arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "server_errors" {
+  count               = var.alarm_email != "" ? 1 : 0
+  alarm_name          = "${local.service_name}-server-errors"
+  alarm_description   = "≥5 server errors (5xx) in 5 minutes"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ServerErrors"
+  namespace           = "Nash/${var.environment}"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  ok_actions          = [aws_sns_topic.alerts[0].arn]
+}
+
+# App Runner native 5xx alarm (does not depend on application logs)
+resource "aws_cloudwatch_metric_alarm" "apprunner_5xx" {
+  count               = var.alarm_email != "" ? 1 : 0
+  alarm_name          = "${local.service_name}-apprunner-5xx"
+  alarm_description   = "≥10 App Runner 5xx responses in 5 minutes"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "5xxStatusResponses"
+  namespace           = "AWS/AppRunner"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 10
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ServiceName = local.service_name
+    ServiceId   = aws_apprunner_service.this.service_id
+  }
+
+  alarm_actions = [aws_sns_topic.alerts[0].arn]
+  ok_actions    = [aws_sns_topic.alerts[0].arn]
 }

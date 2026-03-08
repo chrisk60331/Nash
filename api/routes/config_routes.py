@@ -131,6 +131,8 @@ def get_config():
         "emailEnabled": False,
         "showBirthdayIcon": False,
         "helpAndFaqURL": settings.help_and_faq_url,
+        "statusPageURL": settings.status_page_url,
+        "supportURL": settings.support_url,
         "sharedLinksEnabled": settings.allow_shared_links,
         "publicSharedLinksEnabled": settings.allow_shared_links,
         "instanceProjectId": "nash-2",
@@ -149,6 +151,26 @@ def get_config():
             "codeBrowser": False,
             "fileCitations": True,
             "remoteAgents": {"use": False, "create": False, "share": False, "public": False},
+            "privacyPolicy": {
+                "externalUrl": "/privacy",
+            },
+            "termsOfService": {
+                "externalUrl": "/terms",
+                "modalAcceptance": True,
+                "modalTitle": "Terms of Service",
+                "modalContent": (
+                    "By using Nash, you agree to our [Terms of Service](/terms) and "
+                    "[Privacy Policy](/privacy).\n\n"
+                    "**Key points:**\n"
+                    "- You must be 13 or older to use Nash\n"
+                    "- Don't use Nash to generate harmful or illegal content\n"
+                    "- We don't sell your data or use your conversations to train AI models\n"
+                    "- AI responses may be inaccurate — always verify important information\n"
+                    "- Paid plans renew monthly and can be cancelled anytime\n\n"
+                    "You can read our full [Terms of Service](/terms) and [Privacy Policy](/privacy) "
+                    "for complete details."
+                ),
+            },
         },
         "billing": {
             "enabled": True,

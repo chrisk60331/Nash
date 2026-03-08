@@ -18,7 +18,7 @@ import {
 } from '~/Providers';
 import { useUserTermsQuery, useGetStartupConfig, useInitQuery } from '~/data-provider';
 import { Nav, MobileNav, NAV_WIDTH } from '~/components/Nav';
-import { TermsAndConditionsModal } from '~/components/ui';
+import { TermsAndConditionsModal, CookieConsentBanner } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
 
@@ -108,6 +108,7 @@ export default function Root() {
               modalContent={config.interface.termsOfService.modalContent}
             />
           )}
+          <CookieConsentBanner />
         </AssistantsMapContext.Provider>
       </FileMapContext.Provider>
     </SetConvoProvider>

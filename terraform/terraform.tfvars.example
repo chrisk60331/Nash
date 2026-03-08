@@ -26,3 +26,7 @@ stripe_webhook_secret     = ""
 stripe_secret_key         = ""
 
 backboard_auth_assistant_id = ""
+
+# Monitoring
+alarm_email        = ""   # e.g. "ops@yourcompany.com" — leave empty to skip alarms
+log_retention_days = 90

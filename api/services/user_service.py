@@ -47,6 +47,7 @@ def _normalize_user(raw: dict) -> dict:
         "referredByUserId": raw.get("referredByUserId", ""),
         "referredAt": raw.get("referredAt", ""),
         "referralRewardGrantedAt": raw.get("referralRewardGrantedAt", ""),
+        "termsAcceptedAt": raw.get("termsAcceptedAt", ""),
         "createdAt": raw.get("createdAt", ""),
         "updatedAt": raw.get("updatedAt", ""),
         "_memory_id": raw.get("_memory_id", ""),
@@ -240,3 +241,30 @@ def get_all_users() -> list[dict]:
     for u in users:
         _cache_user(u)
     return list(_user_cache.values())
+
+
+def delete_user(user: dict) -> None:
+    """Permanently delete a user's Backboard memory record and remove from cache.
+
+    Does NOT delete the user's chat or config assistants — call the caller
+    must wipe all memories from those assistants before calling this.
+    """
+    memory_id = user.get("_memory_id")
+    if not memory_id:
+        print(f"[delete_user] WARN: no _memory_id for user {user.get('email')} — auth record not deleted from Backboard")
+    else:
+        async def _delete():
+            client = get_client()
+            await client.delete_memory(
+                assistant_id=settings.backboard_auth_assistant_id,
+                memory_id=memory_id,
+            )
+
+        try:
+            run_async(_delete())
+        except Exception as e:
+            print(f"[delete_user] ERROR deleting auth record for {user.get('email')}: {e}")
+
+    email = user.get("email", "")
+    if email:
+        _user_cache.pop(email, None)

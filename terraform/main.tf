@@ -91,5 +91,7 @@ module "apprunner" {
   environment_variables = local.environment_variables
   ssm_secret_arns       = module.ssm_secrets.arns
 
-  custom_domain = var.custom_domain
+  custom_domain      = var.custom_domain
+  log_retention_days = var.log_retention_days
+  alarm_email        = var.alarm_email
 }

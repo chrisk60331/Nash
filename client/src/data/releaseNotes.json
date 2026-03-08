@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.13.0",
+    "title": "v2.13.0",
+    "publishedAt": "2026-03-08T00:00:00Z",
+    "body": "**Minor release — SOC2 compliance foundations**\n\n- **Legal pages:** `/privacy`, `/terms`, `/cookies`, `/docs` (Help & FAQ) — publicly accessible, no login required, linked from all footers\n- **ToS modal:** First-time acceptance modal for authenticated users; acceptance timestamp recorded on user record in Backboard\n- **Cookie consent banner:** GDPR-style banner with Accept / Essential-only choice, stored in localStorage\n- **Audit logging:** Structured JSON audit log (stdout → CloudWatch) for all auth events: login success/failure, register, logout, token refresh, OAuth, lockout, ToS acceptance, data deletion, rate limit blocks, 5xx errors\n- **Rate limiting:** Per-IP limits on login (10/min), register (5/hr), refresh (60/min), OAuth (20/min), and a 300/min global default via flask-limiter\n- **Account lockout:** 5 consecutive login failures within 15 minutes locks the account for 15 minutes\n- **CSRF protection:** `Sec-Fetch-Site` + Origin header check on refresh and logout endpoints\n- **Full account deletion:** `DELETE /api/user/account` cancels Stripe subscription and wipes all Backboard data\n- **CloudWatch alarms (Terraform):** Log group retention (90 days), SNS topic, metric filters, and alarms for login failures, rate limit spikes, server errors, and lockouts\n- **Footer:** Privacy, Terms, Cookies, Status (StatusGator), Support (email) links on all pages; configurable via `STATUS_PAGE_URL` / `SUPPORT_URL` env vars\n- **Help & FAQ:** New `/docs` page with six sections covering models, billing, data privacy, account management, and troubleshooting\n- **Registration:** \"By creating an account you agree to our Terms\" text with links\n- **Help & FAQ nav item:** Points to `/docs` (was nash.backboard.io)"
+  },
+  {
     "tagName": "v2.12.4",
     "title": "v2.12.4",
     "publishedAt": "2026-03-08T00:00:00Z",

@@ -11,6 +11,10 @@ from api.middleware.jwt_auth import (
     create_refresh_token,
     decode_refresh_token,
 )
+from api.middleware.rate_limit import limiter
+from api.middleware.csrf import csrf_protect
+from api.services import audit_service
+from api.services import lockout_service
 from api.services.user_service import find_user_by_email, find_user_by_id, create_user, update_user_field, verify_password
 from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
@@ -102,23 +106,54 @@ def _ensure_bb_assistant(user: dict) -> str:
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip()
     password = data.get("password") or ""
 
     if not email or not password:
+        audit_service.emit("auth.login.failure", result="fail", reason="missing_fields")
         return jsonify({"message": "Email and password are required"}), 400
+
+    if lockout_service.is_locked(email):
+        remaining = lockout_service.lockout_remaining_seconds(email)
+        audit_service.emit(
+            "auth.login.locked",
+            result="blocked",
+            email_domain=email.split("@")[-1] if "@" in email else "",
+            remaining_seconds=remaining,
+        )
+        return jsonify({"message": f"Account temporarily locked. Try again in {remaining // 60 + 1} minutes."}), 429
 
     user = find_user_by_email(email)
     if not user or not verify_password(user, password):
+        became_locked = lockout_service.record_failure(email)
+        audit_service.emit(
+            "auth.login.failure",
+            result="fail",
+            reason="invalid_credentials",
+            email_domain=email.split("@")[-1] if "@" in email else "",
+            locked=became_locked,
+        )
+        if became_locked:
+            audit_service.emit(
+                "auth.login.locked",
+                result="blocked",
+                email_domain=email.split("@")[-1] if "@" in email else "",
+                remaining_seconds=lockout_service.lockout_remaining_seconds(email),
+            )
+            return jsonify({"message": "Too many failed attempts. Account locked for 15 minutes."}), 429
         return jsonify({"message": "Incorrect email or password"}), 401
 
+    lockout_service.record_success(email)
     _ensure_bb_assistant(user)
 
     user_id = user["id"]
     access_token = create_access_token(user_id)
     refresh_token = create_refresh_token(user_id)
+
+    audit_service.emit("auth.login.success", user_id=user_id)
 
     user_data = {
         "id": user["id"],
@@ -146,8 +181,10 @@ def login():
 
 
 @auth_bp.route("/api/auth/register", methods=["POST"])
+@limiter.limit("5 per hour")
 def register():
     if not settings.allow_registration:
+        audit_service.emit("auth.register.failure", result="fail", reason="registration_disabled")
         return jsonify({"message": "Registration is disabled"}), 403
 
     data = request.get_json(silent=True) or {}
@@ -159,13 +196,16 @@ def register():
     promo_code = (data.get("promoCode") or data.get("promo") or "").strip().upper()
 
     if not name or not email or not password:
+        audit_service.emit("auth.register.failure", result="fail", reason="missing_fields")
         return jsonify({"message": "Name, email, and password are required"}), 400
 
     if len(password) < 8:
+        audit_service.emit("auth.register.failure", result="fail", reason="password_too_short")
         return jsonify({"message": "Password must be at least 8 characters"}), 400
 
     existing = find_user_by_email(email)
     if existing:
+        audit_service.emit("auth.register.failure", result="fail", reason="email_exists")
         return jsonify({"message": "A user with this email already exists"}), 409
     if referral_code and not referral_code_exists(referral_code):
         return jsonify({"message": "Referral code not found"}), 400
@@ -187,6 +227,8 @@ def register():
     if promo_code:
         redeem_promo_code(user["id"], promo_code)
 
+    audit_service.emit("auth.register.success", user_id=user["id"])
+
     refresh_token = create_refresh_token(user["id"])
 
     response = make_response(jsonify({"message": "Registration successful"}))
@@ -203,7 +245,9 @@ def register():
 
 
 @auth_bp.route("/oauth/google", methods=["GET"])
+@limiter.limit("20 per minute")
 def oauth_google():
+    audit_service.emit("auth.oauth.start", provider="google")
     callback_url = f"{settings.domain_server}{settings.google_callback_url}"
     referral_code = (request.args.get("ref") or "").strip().upper()
     promo_code = (request.args.get("promo") or "").strip().upper()
@@ -246,6 +290,7 @@ def oauth_google_callback():
         "grant_type": "authorization_code",
     })
     if token_resp.status_code != 200:
+        audit_service.emit("auth.oauth.failure", result="fail", provider="google", reason="token_exchange_failed")
         return redirect(f"{settings.domain_client}/login?error=token_exchange_failed")
 
     tokens = token_resp.json()
@@ -256,6 +301,7 @@ def oauth_google_callback():
         headers={"Authorization": f"Bearer {google_access_token}"},
     )
     if userinfo_resp.status_code != 200:
+        audit_service.emit("auth.oauth.failure", result="fail", provider="google", reason="userinfo_failed")
         return redirect(f"{settings.domain_client}/login?error=userinfo_failed")
 
     userinfo = userinfo_resp.json()
@@ -264,8 +310,10 @@ def oauth_google_callback():
     picture = userinfo.get("picture", "")
 
     user = find_user_by_email(email)
+    is_new_user = user is None
     if user is None:
         if not settings.allow_social_registration:
+            audit_service.emit("auth.oauth.failure", result="fail", provider="google", reason="registration_disabled")
             return redirect(f"{settings.domain_client}/login?error=registration_disabled")
         user = create_user(
             email=email,
@@ -289,6 +337,13 @@ def oauth_google_callback():
     user_id = user["id"]
     access_token = create_access_token(user_id)
     refresh_token = create_refresh_token(user_id)
+
+    audit_service.emit(
+        "auth.oauth.success",
+        user_id=user_id,
+        provider="google",
+        new_user=is_new_user,
+    )
 
     redirect_url = f"{settings.domain_client}/c/new"
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>SSO Login</title></head>
@@ -314,6 +369,8 @@ def oauth_google_callback():
 
 
 @auth_bp.route("/api/auth/refresh", methods=["GET", "POST"])
+@limiter.limit("60 per minute")
+@csrf_protect
 def refresh():
     refresh_token = request.cookies.get("refreshToken")
     if not refresh_token:
@@ -322,10 +379,12 @@ def refresh():
     try:
         payload = decode_refresh_token(refresh_token)
     except Exception:
+        audit_service.emit("auth.refresh.failure", result="fail", reason="invalid_token")
         return jsonify({"token": "", "user": None})
 
     user_id = payload.get("sub")
     if not user_id:
+        audit_service.emit("auth.refresh.failure", result="fail", reason="missing_sub")
         return jsonify({"token": "", "user": None})
     new_access_token = create_access_token(user_id)
     new_refresh_token = create_refresh_token(user_id)
@@ -347,6 +406,8 @@ def refresh():
             "updatedAt": user.get("updatedAt", ""),
         }
 
+    audit_service.emit("auth.refresh.success", user_id=user_id)
+
     response = make_response(jsonify({"token": new_access_token, "user": user_data}))
     response.set_cookie(
         "refreshToken",
@@ -361,7 +422,18 @@ def refresh():
 
 
 @auth_bp.route("/api/auth/logout", methods=["GET", "POST"])
+@csrf_protect
 def logout():
+    # Best-effort: extract user_id from the refresh token cookie for the audit log.
+    user_id = None
+    try:
+        rt = request.cookies.get("refreshToken")
+        if rt:
+            payload = decode_refresh_token(rt)
+            user_id = payload.get("sub")
+    except Exception:
+        pass
+    audit_service.emit("auth.logout", user_id=user_id)
     response = make_response(jsonify({"message": "Logged out"}))
     response.delete_cookie("refreshToken", path="/")
     return response

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import TagManager from 'react-gtm-module';
+import { Link } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { useGetStartupConfig } from '~/data-provider';
 import { useLocalize } from '~/hooks';
@@ -12,19 +13,16 @@ export default function Footer({ className }: { className?: string }) {
   const localize = useLocalize();
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
 
-  const privacyPolicy = config?.interface?.privacyPolicy;
-  const termsOfService = config?.interface?.termsOfService;
-
-  const privacyPolicyRender = privacyPolicy?.externalUrl != null && (
-    <a className="text-text-secondary underline" href={privacyPolicy.externalUrl} rel="noreferrer">
+  const privacyPolicyRender = (
+    <Link className="text-text-secondary underline" to="/privacy">
       {localize('com_ui_privacy_policy')}
-    </a>
+    </Link>
   );
 
-  const termsOfServiceRender = termsOfService?.externalUrl != null && (
-    <a className="text-text-secondary underline" href={termsOfService.externalUrl} rel="noreferrer">
+  const termsOfServiceRender = (
+    <Link className="text-text-secondary underline" to="/terms">
       {localize('com_ui_terms_of_service')}
-    </a>
+    </Link>
   );
 
   const customFooterParts =
@@ -77,9 +75,48 @@ export default function Footer({ className }: { className?: string }) {
         <SlotMachineText key="latest-footer-copy" className="text-text-secondary" />,
       ];
 
-  const footerElements = [...mainContentRender, privacyPolicyRender, termsOfServiceRender].filter(
-    Boolean,
+  const statusUrl =
+    ((config as Record<string, unknown>)?.statusPageURL as string | undefined) ??
+    'https://crimson-rabbit-6111.statusgator.app';
+  const supportUrl =
+    ((config as Record<string, unknown>)?.supportURL as string | undefined) ??
+    'mailto:support@backboard.io';
+
+  const cookiesRender = (
+    <Link className="text-text-secondary underline" to="/cookies">
+      Cookies
+    </Link>
   );
+
+  const statusRender = (
+    <a
+      className="text-text-secondary underline"
+      href={statusUrl}
+      target={statusUrl.startsWith('http') ? '_blank' : undefined}
+      rel="noreferrer"
+    >
+      Status
+    </a>
+  );
+
+  const supportRender = (
+    <a
+      className="text-text-secondary underline"
+      href={supportUrl}
+    >
+      Support
+    </a>
+  );
+
+  // Legal/support links first, Nash version + scroll text rightmost
+  const footerElements = [
+    privacyPolicyRender,
+    termsOfServiceRender,
+    cookiesRender,
+    statusRender,
+    supportRender,
+    ...mainContentRender,
+  ].filter(Boolean);
 
   return (
     <div className="relative w-full">

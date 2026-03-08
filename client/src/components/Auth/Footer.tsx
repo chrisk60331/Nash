@@ -1,60 +1,56 @@
-import { useState } from 'react';
-import { useLocalize } from '~/hooks';
+import { Fragment, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Constants, TStartupConfig } from 'librechat-data-provider';
 import ReleaseNotesModal from '~/components/Chat/ReleaseNotesModal';
 
 function Footer({ startupConfig }: { startupConfig: TStartupConfig | null | undefined }) {
-  const localize = useLocalize();
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
-  if (!startupConfig) {
-    return null;
-  }
-  const privacyPolicy = startupConfig.interface?.privacyPolicy;
-  const termsOfService = startupConfig.interface?.termsOfService;
 
-  const privacyPolicyRender = privacyPolicy?.externalUrl && (
-    <a
-      className="text-sm text-green-600 underline decoration-transparent transition-all duration-200 hover:text-green-700 hover:decoration-green-700 focus:text-green-700 focus:decoration-green-700 dark:text-green-500 dark:hover:text-green-400 dark:hover:decoration-green-400 dark:focus:text-green-400 dark:focus:decoration-green-400"
-      href={privacyPolicy.externalUrl}
-      // Removed for WCAG compliance
-      // target={privacyPolicy.openNewTab ? '_blank' : undefined}
-      rel="noreferrer"
-    >
-      {localize('com_ui_privacy_policy')}
-    </a>
-  );
+  const statusUrl =
+    ((startupConfig as Record<string, unknown>)?.statusPageURL as string | undefined) ??
+    'https://crimson-rabbit-6111.statusgator.app';
+  const supportUrl =
+    ((startupConfig as Record<string, unknown>)?.supportURL as string | undefined) ??
+    'mailto:support@backboard.io';
 
-  const termsOfServiceRender = termsOfService?.externalUrl && (
+  const linkClass =
+    'text-sm text-green-600 underline decoration-transparent transition-all duration-200 hover:text-green-700 hover:decoration-green-700 focus:text-green-700 focus:decoration-green-700 dark:text-green-500 dark:hover:text-green-400 dark:hover:decoration-green-400 dark:focus:text-green-400 dark:focus:decoration-green-400';
+  const sep = <div className="h-4 border-r-[1px] border-gray-300 dark:border-gray-600" />;
+
+  const links = [
+    <Link key="privacy" to="/privacy" className={linkClass}>Privacy Policy</Link>,
+    <Link key="terms" to="/terms" className={linkClass}>Terms of Service</Link>,
+    <Link key="cookies" to="/cookies" className={linkClass}>Cookies</Link>,
     <a
-      className="text-sm text-green-600 underline decoration-transparent transition-all duration-200 hover:text-green-700 hover:decoration-green-700 focus:text-green-700 focus:decoration-green-700 dark:text-green-500 dark:hover:text-green-400 dark:hover:decoration-green-400 dark:focus:text-green-400 dark:focus:decoration-green-400"
-      href={termsOfService.externalUrl}
-      // Removed for WCAG compliance
-      // target={termsOfService.openNewTab ? '_blank' : undefined}
+      key="status"
+      href={statusUrl}
+      target={statusUrl.startsWith('http') ? '_blank' : undefined}
       rel="noreferrer"
+      className={linkClass}
     >
-      {localize('com_ui_terms_of_service')}
-    </a>
-  );
+      Status
+    </a>,
+    <a key="support" href={supportUrl} className={linkClass}>Support</a>,
+  ];
 
   return (
     <>
       <div className="align-end m-4 flex flex-wrap items-center justify-center gap-2 text-center" role="contentinfo">
+        {links.map((link, i) => (
+          <Fragment key={link.key}>
+            {link}
+            {i < links.length - 1 && sep}
+          </Fragment>
+        ))}
+        {sep}
         <button
           type="button"
-          className="text-sm text-green-600 underline decoration-transparent transition-all duration-200 hover:text-green-700 hover:decoration-green-700 focus:text-green-700 focus:decoration-green-700 dark:text-green-500 dark:hover:text-green-400 dark:hover:decoration-green-400 dark:focus:text-green-400 dark:focus:decoration-green-400"
+          className={linkClass}
           onClick={() => setShowReleaseNotes(true)}
           title={`Open release notes for ${String(Constants.VERSION)}`}
         >
           {`Nash ${String(Constants.VERSION)}`}
         </button>
-        {(privacyPolicyRender || termsOfServiceRender) && (
-          <div className="h-4 border-r-[1px] border-gray-300 dark:border-gray-600" />
-        )}
-        {privacyPolicyRender}
-        {privacyPolicyRender && termsOfServiceRender && (
-          <div className="h-4 border-r-[1px] border-gray-300 dark:border-gray-600" />
-        )}
-        {termsOfServiceRender}
       </div>
       <ReleaseNotesModal
         open={showReleaseNotes}
