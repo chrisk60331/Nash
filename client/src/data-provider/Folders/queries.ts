@@ -61,6 +61,10 @@ export const useDeleteFolderMutation = (
 
 export type FolderMemory = { key: string; value: string; updated_at: string; tokenCount?: number };
 export type FolderMemoriesResponse = { memories: FolderMemory[] };
+export type FolderAssistantPromptResponse = {
+  folder_context: string;
+  system_prompt: string;
+};
 
 export const useFolderMemoriesQuery = (
   folderId: string,
@@ -69,6 +73,24 @@ export const useFolderMemoriesQuery = (
   return useQuery<FolderMemoriesResponse>(
     [QueryKeys.folders, folderId, 'memories'],
     () => request.get(`${apiBaseUrl()}/api/folders/${folderId}/memories`) as Promise<FolderMemoriesResponse>,
+    {
+      refetchOnWindowFocus: false,
+      enabled: !!folderId,
+      ...config,
+    },
+  );
+};
+
+export const useFolderAssistantPromptQuery = (
+  folderId: string,
+  config?: UseQueryOptions<FolderAssistantPromptResponse>,
+): QueryObserverResult<FolderAssistantPromptResponse> => {
+  return useQuery<FolderAssistantPromptResponse>(
+    [QueryKeys.folders, folderId, 'assistant-prompt'],
+    () =>
+      request.get(
+        `${apiBaseUrl()}/api/folders/${folderId}/assistant-prompt`,
+      ) as Promise<FolderAssistantPromptResponse>,
     {
       refetchOnWindowFocus: false,
       enabled: !!folderId,
@@ -113,6 +135,28 @@ export const useCreateFolderMemoryMutation = (
       ...options,
       onSuccess: (...params) => {
         queryClient.invalidateQueries([QueryKeys.folders, folderId, 'memories']);
+        options?.onSuccess?.(...params);
+      },
+    },
+  );
+};
+
+export const useUpdateFolderAssistantPromptMutation = (
+  folderId: string,
+  options?: UseMutationOptions<FolderAssistantPromptResponse, Error, { system_prompt: string }>,
+) => {
+  const queryClient = useQueryClient();
+  return useMutation<FolderAssistantPromptResponse, Error, { system_prompt: string }>(
+    ({ system_prompt }: { system_prompt: string }) =>
+      request.patch(
+        `${apiBaseUrl()}/api/folders/${folderId}/assistant-prompt`,
+        { system_prompt },
+      ) as Promise<FolderAssistantPromptResponse>,
+    {
+      ...options,
+      onSuccess: (...params) => {
+        queryClient.invalidateQueries([QueryKeys.folders, folderId, 'assistant-prompt']);
+        queryClient.invalidateQueries([QueryKeys.folders]);
         options?.onSuccess?.(...params);
       },
     },

@@ -17,6 +17,7 @@ import { useConversationsInfiniteQuery, useFoldersQuery, useDeleteConversationMu
 import { useLocalize, useNewConvo, useNavigateToConvo } from '~/hooks';
 import FolderMemoryImportDialog from './FolderMemoryImportDialog';
 import FolderMemoryBrowserDialog from './FolderMemoryBrowserDialog';
+import FolderAssistantPromptDialog from './FolderAssistantPromptDialog';
 import ChatForm from './Input/ChatForm';
 
 function formatRelativeDate(dateStr: string): string {
@@ -49,6 +50,7 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [browserDialogOpen, setBrowserDialogOpen] = useState(false);
+  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
 
   const folder = useMemo(
     () => folders?.find((f) => f.folderId === folderId),
@@ -118,6 +120,21 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
                 </Button>
               }
             />
+            <TooltipAnchor
+              description="Edit folder assistant prompt"
+              side="bottom"
+              render={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 bg-transparent"
+                  aria-label="Edit folder assistant prompt"
+                  onClick={() => setPromptDialogOpen(true)}
+                >
+                  <MessageSquare className="size-4" aria-hidden="true" />
+                </Button>
+              }
+            />
             <FolderMemoryImportDialog
               open={importDialogOpen}
               onOpenChange={setImportDialogOpen}
@@ -145,6 +162,12 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
           <FolderMemoryBrowserDialog
             open={browserDialogOpen}
             onOpenChange={setBrowserDialogOpen}
+            folderId={folderId}
+            folderName={folder?.name}
+          />
+          <FolderAssistantPromptDialog
+            open={promptDialogOpen}
+            onOpenChange={setPromptDialogOpen}
             folderId={folderId}
             folderName={folder?.name}
           />

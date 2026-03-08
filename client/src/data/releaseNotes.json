@@ -1,9 +1,15 @@
 [
   {
+    "tagName": "v2.14.2",
+    "title": "v2.14.2",
+    "publishedAt": "2026-03-08T22:49:14Z",
+    "body": "**Hotfix release \u2014 folder assistant prompt editor**\\n\\n- **Folder screen UI:** add a third header action button (next to memory browse/import) that opens a modal to view and edit the folder assistant prompt.\\n- **Always-prepended folder context:** effective system prompt always prepends `you are assistant working in {folder name} folder.` while keeping the user-editable prompt separate.\\n- **API support:** add `GET/PATCH /api/folders/<folder_id>/assistant-prompt` and update folder create/rename flows so folder assistant prompts stay in sync."
+  },
+  {
+    "body": "**Hotfix release \u2014 chat assistant system prompt editor**\n\n- **Settings > Chat:** add a prominent editable section for each user's chat assistant system prompt.\n- **Right drawer:** add a dedicated \"Chat assistant prompt\" card for quick inline updates while chatting.\n- **API/data wiring:** add authenticated `GET/PATCH /api/user/chat-assistant` and corresponding data-provider/react-query support.",
+    "publishedAt": "2026-03-08T22:22:45Z",
     "tagName": "v2.14.1",
-    "title": "v2.14.1",
-    "publishedAt": "2026-03-08T22:22:00Z",
-    "body": "**Hotfix release \u2014 chat assistant system prompt editor**\\n\\n- **Settings > Chat:** add a prominent editable section for each user's chat assistant system prompt.\\n- **Right drawer:** add a dedicated \"Chat assistant prompt\" card for quick inline updates while chatting.\\n- **API/data wiring:** add authenticated `GET/PATCH /api/user/chat-assistant` and corresponding data-provider/react-query support."
+    "title": "v2.14.1"
   },
   {
     "body": "**Minor release \u2014 TOTP MFA enrollment and enforcement**\n\n- Add Google Authenticator-compatible TOTP MFA with QR enrollment, verification, disable flow, and single-use backup codes backed by the Flask API\n- Require MFA enrollment for admins before app access, keep it optional for regular users by default, and use short-lived temp tokens for login-time MFA verification\n- Add a runtime admin security toggle to require MFA for all users later without a redeploy\n- Revive and wire the dormant 2FA frontend for local and social-login users, including required enrollment screens/gates and dark-mode setup readability fixes",

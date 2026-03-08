@@ -14,6 +14,18 @@ folders_bp = Blueprint("folders", __name__)
 FOLDER_META_TYPE = "folder"
 
 
+def _folder_context_prompt(folder_name: str) -> str:
+    return f"you are assistant working in {folder_name} folder."
+
+
+def _effective_folder_prompt(folder_name: str, editable_prompt: str) -> str:
+    context = _folder_context_prompt(folder_name)
+    prompt = (editable_prompt or "").strip()
+    if not prompt:
+        return context
+    return f"{context}\n\n{prompt}"
+
+
 async def _list_folders(assistant_id: str) -> list[dict]:
     client = get_client()
     response = await client.get_memories(assistant_id)
@@ -50,6 +62,7 @@ def create_folder():
         "folderId": folder_id,
         "name": data.get("name", "New Folder"),
         "type": data.get("type", "conversation"),
+        "assistant_prompt": "",
         "createdAt": now,
         "updatedAt": now,
     }
@@ -58,7 +71,7 @@ def create_folder():
         client = get_client()
         bb_assistant = await client.create_assistant(
             name=f"nash-folder-{folder_id}",
-            system_prompt="",
+            system_prompt=_effective_folder_prompt(folder["name"], folder["assistant_prompt"]),
         )
         folder["bb_assistant_id"] = str(bb_assistant.assistant_id)
         await client.add_memory(
@@ -84,6 +97,9 @@ def update_folder(folder_id):
             if "name" in data:
                 f["name"] = data["name"]
             f["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            editable_prompt = str(f.get("assistant_prompt", "") or "")
+            folder_name = str(f.get("name", "New Folder") or "New Folder")
+            bb_assistant_id = str(f.get("bb_assistant_id", "") or "")
 
             async def _update():
                 client = get_client()
@@ -93,6 +109,11 @@ def update_folder(folder_id):
                     content=json.dumps({k: v for k, v in f.items() if k != "_memory_id"}),
                     metadata={"type": FOLDER_META_TYPE, "folderId": folder_id},
                 )
+                if bb_assistant_id:
+                    await client.update_assistant(
+                        assistant_id=bb_assistant_id,
+                        system_prompt=_effective_folder_prompt(folder_name, editable_prompt),
+                    )
             run_async(_update())
             return jsonify({k: v for k, v in f.items() if k != "_memory_id"})
 
@@ -204,6 +225,82 @@ def create_folder_memory(folder_id):
         "created": True,
         "memory": {"key": memory_id, "value": value},
     }), 201
+
+
+@folders_bp.route("/api/folders/<folder_id>/assistant-prompt", methods=["GET"])
+@require_jwt
+def get_folder_assistant_prompt(folder_id):
+    config_assistant_id = get_user_config_assistant_id(g.user_id)
+    folders = run_async(_list_folders(config_assistant_id))
+
+    target_folder = None
+    for f in folders:
+        if f.get("folderId") == folder_id:
+            target_folder = f
+            break
+
+    if not target_folder:
+        return jsonify({"error": "Folder not found"}), 404
+
+    folder_name = str(target_folder.get("name", "New Folder") or "New Folder")
+    editable_prompt = str(target_folder.get("assistant_prompt", "") or "")
+    return jsonify({
+        "folder_context": _folder_context_prompt(folder_name),
+        "system_prompt": editable_prompt,
+    })
+
+
+@folders_bp.route("/api/folders/<folder_id>/assistant-prompt", methods=["PATCH"])
+@require_jwt
+def update_folder_assistant_prompt(folder_id):
+    data = request.get_json(silent=True) or {}
+    editable_prompt = data.get("system_prompt")
+    if editable_prompt is None:
+        return jsonify({"error": "system_prompt is required"}), 400
+    editable_prompt = str(editable_prompt)
+
+    config_assistant_id = get_user_config_assistant_id(g.user_id)
+    folders = run_async(_list_folders(config_assistant_id))
+
+    target_folder = None
+    for f in folders:
+        if f.get("folderId") == folder_id:
+            target_folder = f
+            break
+
+    if not target_folder:
+        return jsonify({"error": "Folder not found"}), 404
+
+    memory_id = target_folder.get("_memory_id")
+    if not memory_id:
+        return jsonify({"error": "Folder metadata missing"}), 500
+
+    folder_name = str(target_folder.get("name", "New Folder") or "New Folder")
+    bb_assistant_id = str(target_folder.get("bb_assistant_id", "") or "")
+    if not bb_assistant_id:
+        return jsonify({"error": "Folder assistant missing"}), 404
+
+    target_folder["assistant_prompt"] = editable_prompt
+    target_folder["updatedAt"] = datetime.now(timezone.utc).isoformat()
+
+    async def _update():
+        client = get_client()
+        await client.update_memory(
+            assistant_id=config_assistant_id,
+            memory_id=memory_id,
+            content=json.dumps({k: v for k, v in target_folder.items() if k != "_memory_id"}),
+            metadata={"type": FOLDER_META_TYPE, "folderId": folder_id},
+        )
+        await client.update_assistant(
+            assistant_id=bb_assistant_id,
+            system_prompt=_effective_folder_prompt(folder_name, editable_prompt),
+        )
+
+    run_async(_update())
+    return jsonify({
+        "folder_context": _folder_context_prompt(folder_name),
+        "system_prompt": editable_prompt,
+    })
 
 
 @folders_bp.route("/api/folders/<folder_id>", methods=["DELETE"])
