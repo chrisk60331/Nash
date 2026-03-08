@@ -101,10 +101,37 @@ def get_conversations():
 @require_jwt
 def get_conversation(conversation_id):
     assistant_id = get_user_assistant_id(g.user_id)
+    config_assistant_id = get_user_config_assistant_id(g.user_id)
+
     convos = list_conversations(assistant_id)
     for c in convos:
         if c.get("conversationId") == conversation_id:
             return jsonify(_format_convo(c))
+
+    # Not found in main assistant — conversation may only have a thread_mapping on a
+    # folder's BB assistant (created before conversation_meta lazy-write was added).
+    # Scan all folder assistants to find the owning folder.
+    folder_id, folder_bb_aid = run_async(
+        _find_folder_for_conversation(config_assistant_id, conversation_id)
+    )
+    if folder_id:
+        now = datetime.now(timezone.utc).isoformat()
+        synthetic = {
+            "conversationId": conversation_id,
+            "title": "New Chat",
+            "endpoint": "",
+            "model": "",
+            "isArchived": False,
+            "tags": [],
+            "folderId": folder_id,
+            "hidden": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        # Persist so subsequent loads (including chat routing) find it immediately.
+        save_conversation_meta(assistant_id, conversation_id, synthetic)
+        return jsonify(_format_convo(synthetic))
+
     return jsonify({"error": "Not found"}), 404
 
 
@@ -197,6 +224,26 @@ async def _get_bb_assistant_id_for_folder(config_assistant_id: str, folder_id: s
         if data.get("folderId") == folder_id:
             return data.get("bb_assistant_id", "")
     return ""
+
+
+async def _find_folder_for_conversation(config_assistant_id: str, conversation_id: str) -> tuple[str, str]:
+    """Scan all folder BB assistants to find which one has a thread_mapping for conversation_id.
+
+    Returns (folder_id, folder_bb_assistant_id), or ("", "") if not found.
+    """
+    from api.routes.folders import _list_folders
+    client = get_client()
+    folders = await _list_folders(config_assistant_id)
+    for f in folders:
+        bb_aid = f.get("bb_assistant_id", "")
+        if not bb_aid:
+            continue
+        resp = await client.get_memories(bb_aid)
+        for m in resp.memories:
+            meta = m.metadata or {}
+            if meta.get("type") == "thread_mapping" and meta.get("conversationId") == conversation_id:
+                return f.get("folderId", ""), bb_aid
+    return "", ""
 
 
 @conversations_bp.route("/api/convos/gen_title/<conversation_id>", methods=["GET"])

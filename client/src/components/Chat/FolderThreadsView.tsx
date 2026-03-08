@@ -12,9 +12,9 @@ import {
   OGDialogContent,
   TooltipAnchor,
 } from '@librechat/client';
-import type { TMessage, ConversationListResponse } from 'librechat-data-provider';
+import type { TMessage, TConversation, ConversationListResponse } from 'librechat-data-provider';
 import { useConversationsInfiniteQuery, useFoldersQuery, useDeleteConversationMutation } from '~/data-provider';
-import { useLocalize, useNewConvo } from '~/hooks';
+import { useLocalize, useNewConvo, useNavigateToConvo } from '~/hooks';
 import FolderMemoryImportDialog from './FolderMemoryImportDialog';
 import FolderMemoryBrowserDialog from './FolderMemoryBrowserDialog';
 import ChatForm from './Input/ChatForm';
@@ -44,6 +44,7 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
   const queryClient = useQueryClient();
   const { conversationId: currentConvoId } = useParams();
   const { newConversation } = useNewConvo(index);
+  const { navigateToConvo } = useNavigateToConvo(index);
   const { data: folders } = useFoldersQuery();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -75,10 +76,10 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
   });
 
   const handleConvoClick = useCallback(
-    (conversationId: string) => {
-      navigate(`/c/${conversationId}`);
+    (convo: TConversation) => {
+      navigateToConvo(convo, { currentConvoId });
     },
-    [navigate],
+    [navigateToConvo, currentConvoId],
   );
 
   const confirmDelete = useCallback(() => {
@@ -178,7 +179,7 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
                 >
                   <button
                     type="button"
-                    onClick={() => handleConvoClick(convo.conversationId as string)}
+                    onClick={() => handleConvoClick(convo as TConversation)}
                     className="flex min-w-0 flex-1 items-center justify-between px-3 py-3.5 text-left"
                   >
                     <span className="min-w-0 truncate text-sm font-medium text-text-primary">
