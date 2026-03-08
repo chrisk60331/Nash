@@ -19,12 +19,12 @@ export default function CreateFolderModal({ open, onOpenChange }: CreateFolderMo
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [name, setName] = useState('');
-  const [sharedMemory, setSharedMemory] = useState(true);
+  const [sharedMemory, setSharedMemory] = useState(false);
 
   const createMutation = useCreateFolderMutation({
     onSuccess: () => {
       setName('');
-      setSharedMemory(true);
+      setSharedMemory(false);
       onOpenChange(false);
     },
     onError: () => {

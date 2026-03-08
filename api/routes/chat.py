@@ -80,6 +80,23 @@ async def _get_agent_bb_assistant_id(config_assistant_id: str, agent_id: str) ->
     return ""
 
 
+async def _get_folder_bb_assistant_id(config_assistant_id: str, folder_id: str) -> str:
+    """Look up the Backboard assistant ID for a folder."""
+    client = get_client()
+    response = await client.get_memories(config_assistant_id)
+    for m in response.memories:
+        meta = m.metadata or {}
+        if meta.get("type") != "folder":
+            continue
+        try:
+            folder_data = json.loads(m.content)
+        except json.JSONDecodeError:
+            continue
+        if folder_data.get("folderId") == folder_id:
+            return folder_data.get("bb_assistant_id", "")
+    return ""
+
+
 async def _list_file_metas(assistant_id: str) -> list[dict]:
     client = get_client()
     response = await client.get_memories(assistant_id)
@@ -255,7 +272,20 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         except Exception:
             logger.exception("Failed to resolve bb_assistant_id for agent_id=%s", agent_id)
 
-    thread_owner_id = agent_bb_assistant_id or assistant_id
+    folder_bb_assistant_id = ""
+    if not agent_bb_assistant_id:
+        folder_id = payload.get("folderId", "")
+        if folder_id:
+            try:
+                folder_bb_assistant_id = run_async(_get_folder_bb_assistant_id(config_assistant_id, folder_id))
+                if folder_bb_assistant_id:
+                    logger.warning("[chat] resolved folder_id=%s -> bb_assistant_id=%s", folder_id, folder_bb_assistant_id)
+                else:
+                    logger.warning("[chat] folder_id=%s has no bb_assistant_id, falling back to default", folder_id)
+            except Exception:
+                logger.exception("Failed to resolve bb_assistant_id for folder_id=%s", folder_id)
+
+    thread_owner_id = agent_bb_assistant_id or folder_bb_assistant_id or assistant_id
     thread_id, conversation_id, is_new = get_or_create_thread(thread_owner_id, conversation_id)
 
     user_text = _extract_user_text(payload)

@@ -1,7 +1,7 @@
 import { memo, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { FolderOpenIcon, MessageSquare, Trash2 } from 'lucide-react';
+import { FolderOpenIcon, MessageSquare, Trash2, Import, BrainCircuit } from 'lucide-react';
 import { QueryKeys } from 'librechat-data-provider';
 import {
   Button,
@@ -10,10 +10,13 @@ import {
   OGDialogTitle,
   OGDialogHeader,
   OGDialogContent,
+  TooltipAnchor,
 } from '@librechat/client';
 import type { TMessage, ConversationListResponse } from 'librechat-data-provider';
 import { useConversationsInfiniteQuery, useFoldersQuery, useDeleteConversationMutation } from '~/data-provider';
 import { useLocalize, useNewConvo } from '~/hooks';
+import FolderMemoryImportDialog from './FolderMemoryImportDialog';
+import FolderMemoryBrowserDialog from './FolderMemoryBrowserDialog';
 import ChatForm from './Input/ChatForm';
 
 function formatRelativeDate(dateStr: string): string {
@@ -43,6 +46,8 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
   const { newConversation } = useNewConvo(index);
   const { data: folders } = useFoldersQuery();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [browserDialogOpen, setBrowserDialogOpen] = useState(false);
 
   const folder = useMemo(
     () => folders?.find((f) => f.folderId === folderId),
@@ -88,7 +93,7 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
 
   return (
     <div className="relative flex h-full w-full flex-col items-center overflow-y-auto">
-      <div className="w-full max-w-3xl px-6 py-8">
+      <div className="w-full max-w-3xl px-6 pb-8 pt-20">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-hover">
             <FolderOpenIcon className="h-5 w-5 text-text-primary" />
@@ -96,6 +101,52 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
           <h1 className="text-2xl font-semibold text-text-primary">
             {folder?.name ?? localize('com_folder_folders')}
           </h1>
+          <div className="ml-auto flex items-center gap-2">
+            <TooltipAnchor
+              description="Browse folder memories"
+              side="bottom"
+              render={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 bg-transparent"
+                  aria-label="Browse folder memories"
+                  onClick={() => setBrowserDialogOpen(true)}
+                >
+                  <BrainCircuit className="size-4" aria-hidden="true" />
+                </Button>
+              }
+            />
+            <FolderMemoryImportDialog
+              open={importDialogOpen}
+              onOpenChange={setImportDialogOpen}
+              folderId={folderId}
+              folderName={folder?.name}
+            >
+              <TooltipAnchor
+                description="Import memories into this folder"
+                side="bottom"
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 bg-transparent"
+                    aria-label="Import memories into folder"
+                    onClick={() => setImportDialogOpen(true)}
+                  >
+                    <Import className="size-4" aria-hidden="true" />
+                  </Button>
+                }
+              />
+            </FolderMemoryImportDialog>
+          </div>
+
+          <FolderMemoryBrowserDialog
+            open={browserDialogOpen}
+            onOpenChange={setBrowserDialogOpen}
+            folderId={folderId}
+            folderName={folder?.name}
+          />
         </div>
 
         <div className="mb-6">
@@ -155,6 +206,7 @@ function FolderThreadsView({ folderId, index = 0 }: { folderId: string; index?: 
             </div>
           )}
         </div>
+
       </div>
 
       <OGDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

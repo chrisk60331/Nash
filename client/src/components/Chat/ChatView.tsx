@@ -112,7 +112,7 @@ function ChatView({ index = 0 }: { index?: number }) {
                     </div>
                   )}
                 </div>
-                {isNormalLanding && <Footer />}
+                {(isNormalLanding || isFolderView) && <Footer />}
               </>
             </div>
           </Presentation>

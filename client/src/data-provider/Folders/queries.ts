@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { QueryKeys, MutationKeys, dataService } from 'librechat-data-provider';
+import { QueryKeys, MutationKeys, dataService, apiBaseUrl, request } from 'librechat-data-provider';
 import type {
   UseQueryOptions,
   UseMutationOptions,
@@ -53,6 +53,66 @@ export const useDeleteFolderMutation = (
       onSuccess: (...params) => {
         queryClient.invalidateQueries([QueryKeys.folders]);
         queryClient.invalidateQueries([QueryKeys.allConversations]);
+        options?.onSuccess?.(...params);
+      },
+    },
+  );
+};
+
+export type FolderMemory = { key: string; value: string; updated_at: string; tokenCount?: number };
+export type FolderMemoriesResponse = { memories: FolderMemory[] };
+
+export const useFolderMemoriesQuery = (
+  folderId: string,
+  config?: UseQueryOptions<FolderMemoriesResponse>,
+): QueryObserverResult<FolderMemoriesResponse> => {
+  return useQuery<FolderMemoriesResponse>(
+    [QueryKeys.folders, folderId, 'memories'],
+    () => request.get(`${apiBaseUrl()}/api/folders/${folderId}/memories`) as Promise<FolderMemoriesResponse>,
+    {
+      refetchOnWindowFocus: false,
+      enabled: !!folderId,
+      ...config,
+    },
+  );
+};
+
+export const useDeleteFolderMemoryMutation = (
+  folderId: string,
+  options?: UseMutationOptions<void, Error, string>,
+) => {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>(
+    (memoryId: string) =>
+      request.delete(`${apiBaseUrl()}/api/folders/${folderId}/memories/${memoryId}`) as Promise<void>,
+    {
+      ...options,
+      onSuccess: (...params) => {
+        queryClient.invalidateQueries([QueryKeys.folders, folderId, 'memories']);
+        options?.onSuccess?.(...params);
+      },
+    },
+  );
+};
+
+export type CreateFolderMemoryParams = { key: string; value: string };
+export type CreateFolderMemoryResponse = { created: boolean; memory: { key: string; value: string } };
+
+export const useCreateFolderMemoryMutation = (
+  folderId: string,
+  options?: UseMutationOptions<CreateFolderMemoryResponse, Error, CreateFolderMemoryParams>,
+) => {
+  const queryClient = useQueryClient();
+  return useMutation<CreateFolderMemoryResponse, Error, CreateFolderMemoryParams>(
+    ({ key, value }: CreateFolderMemoryParams) =>
+      request.post(
+        `${apiBaseUrl()}/api/folders/${folderId}/memories`,
+        { key, value },
+      ) as Promise<CreateFolderMemoryResponse>,
+    {
+      ...options,
+      onSuccess: (...params) => {
+        queryClient.invalidateQueries([QueryKeys.folders, folderId, 'memories']);
         options?.onSuccess?.(...params);
       },
     },

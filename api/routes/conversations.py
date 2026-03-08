@@ -1,10 +1,11 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, g
 
 from api.middleware.jwt_auth import require_jwt
-from api.services.user_service import get_user_assistant_id
+from api.services.user_service import get_user_assistant_id, get_user_config_assistant_id
 from api.services.backboard_service import get_client, get_thread_messages
 from api.services.async_runner import run_async
 from api.services.conversation_service import (
@@ -133,11 +134,46 @@ def delete_conversation():
     return jsonify({"message": "Deleted"})
 
 
+async def _get_bb_assistant_id_for_folder(config_assistant_id: str, folder_id: str) -> str:
+    """Scan config assistant memories for a folder's bb_assistant_id."""
+    client = get_client()
+    resp = await client.get_memories(config_assistant_id)
+    for m in resp.memories:
+        meta = m.metadata or {}
+        if meta.get("type") != "folder":
+            continue
+        try:
+            data = json.loads(m.content)
+        except (json.JSONDecodeError, Exception):
+            continue
+        if data.get("folderId") == folder_id:
+            return data.get("bb_assistant_id", "")
+    return ""
+
+
 @conversations_bp.route("/api/convos/gen_title/<conversation_id>", methods=["GET"])
 @require_jwt
 def gen_title(conversation_id):
     assistant_id = get_user_assistant_id(g.user_id)
+    config_assistant_id = get_user_config_assistant_id(g.user_id)
+
     thread_id = get_thread_id_for_conversation(conversation_id, assistant_id=assistant_id)
+
+    if not thread_id:
+        # Conversation may live in a folder with its own BB assistant whose thread
+        # mappings haven't been loaded into the in-process cache yet (e.g. after restart).
+        convos = list_conversations(assistant_id)
+        convo_meta = next((c for c in convos if c.get("conversationId") == conversation_id), None)
+        folder_id = (convo_meta or {}).get("folderId")
+        if folder_id:
+            folder_bb_assistant_id = run_async(
+                _get_bb_assistant_id_for_folder(config_assistant_id, folder_id)
+            )
+            if folder_bb_assistant_id:
+                thread_id = get_thread_id_for_conversation(
+                    conversation_id, assistant_id=folder_bb_assistant_id
+                )
+
     if not thread_id:
         return jsonify({"title": "New Chat"})
 

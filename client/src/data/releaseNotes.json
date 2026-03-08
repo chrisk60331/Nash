@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.12.0",
+    "title": "v2.12.0",
+    "publishedAt": "2026-03-08T00:00:00Z",
+    "body": "# Nash v2.12.0\n\n**Folder isolation and memory management**\n\n- **Folder isolation** — Each new folder gets its own dedicated Backboard assistant. Conversations inside a folder use that assistant's thread and context, fully isolated from the main chat and from other folders. Default in the create-folder modal is now isolated.\n- **Folder memory import** — Import button on the folder landing page opens the same two-step ChatGPT export flow as the global memories drawer, but writes memories directly into the folder's assistant.\n- **Folder memory browser** — Brain icon button opens a searchable modal listing all memories stored in the folder assistant, with per-item delete (two-tap confirm).\n- **gen_title fix** — Title generation now correctly resolves threads for folder conversations after a server restart by falling back to the folder's assistant thread mappings.\n- **Folder UI polish** — Folder landing page title clears the header bar (pt-20), footer version/slot-machine text matches landing page position."
+  },
+  {
     "tagName": "v2.11.1",
     "title": "v2.11.1",
     "publishedAt": "2026-03-08T00:00:00Z",
