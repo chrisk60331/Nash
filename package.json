@@ -1,6 +1,6 @@
 {
   "name": "Nash",
-  "version": "2.12.1",
+  "version": "2.12.2",
   "description": "Nash 2.0 - Python backend with LibreChat UI",
   "private": true,
   "packageManager": "npm@11.10.0",

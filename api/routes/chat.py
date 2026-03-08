@@ -287,6 +287,18 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
     thread_owner_id = agent_bb_assistant_id or folder_bb_assistant_id or assistant_id
     thread_id, conversation_id, is_new = get_or_create_thread(thread_owner_id, conversation_id)
 
+    # For new folder conversations, eagerly write hidden conversation_meta so the
+    # conversation never leaks into the main list even during the first stream.
+    if is_new and folder_id and not agent_bb_assistant_id:
+        try:
+            run_async(_save_conversation_meta(
+                assistant_id,
+                conversation_id,
+                {"folderId": folder_id, "hidden": True, "title": "New Chat"},
+            ))
+        except Exception:
+            logger.exception("[chat] stream: failed to pre-save folder conversation meta")
+
     user_text = _extract_user_text(payload)
     model = payload.get("model") or ""
     endpoint = payload.get("endpoint") or payload.get("endpointType") or "bedrock"
