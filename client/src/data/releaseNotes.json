@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.10.0",
+    "title": "v2.10.0",
+    "publishedAt": "2026-03-08T00:00:00Z",
+    "body": "**Minor release**\n\n- **User management redesign:** Rebuilt the admin user management panel into a full-width two-column split-pane layout. User list on the left with avatar initials, role badges, and instant selection; detail panel on the right with plan selector, token usage progress bar, and inline save confirmations.\n- **Promo codes tab:** Moved promo code creation and management into a dedicated tab so it no longer competes with the user list for vertical space.\n- **Micro-interactions:** Added skeleton loading states, colored gradient avatars, animated save confirmations, and active-state button press feedback throughout the admin panel."
+  },
+  {
     "tagName": "v2.9.5",
     "title": "v2.9.5",
     "publishedAt": "2026-03-08T00:00:00Z",
