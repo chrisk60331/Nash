@@ -1050,3 +1050,27 @@ export const useAcceptTermsMutation = (
     onMutate: options?.onMutate,
   });
 };
+
+export const useUpdateChatAssistantMutation = (
+  options?: {
+    onSuccess?: (data: t.TChatAssistantResponse) => void;
+    onError?: (error: unknown) => void;
+  },
+): UseMutationResult<
+  t.TChatAssistantResponse,
+  unknown,
+  { system_prompt: string },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    (payload: { system_prompt: string }) => dataService.updateChatAssistant(payload),
+    {
+      onSuccess: (data) => {
+        queryClient.setQueryData<t.TChatAssistantResponse>([QueryKeys.chatAssistant], data);
+        options?.onSuccess?.(data);
+      },
+      onError: options?.onError,
+    },
+  );
+};

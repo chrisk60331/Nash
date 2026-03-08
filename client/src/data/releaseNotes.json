@@ -1,201 +1,207 @@
 [
   {
+    "tagName": "v2.14.1",
+    "title": "v2.14.1",
+    "publishedAt": "2026-03-08T22:22:00Z",
+    "body": "**Hotfix release \u2014 chat assistant system prompt editor**\\n\\n- **Settings > Chat:** add a prominent editable section for each user's chat assistant system prompt.\\n- **Right drawer:** add a dedicated \"Chat assistant prompt\" card for quick inline updates while chatting.\\n- **API/data wiring:** add authenticated `GET/PATCH /api/user/chat-assistant` and corresponding data-provider/react-query support."
+  },
+  {
+    "body": "**Minor release \u2014 TOTP MFA enrollment and enforcement**\n\n- Add Google Authenticator-compatible TOTP MFA with QR enrollment, verification, disable flow, and single-use backup codes backed by the Flask API\n- Require MFA enrollment for admins before app access, keep it optional for regular users by default, and use short-lived temp tokens for login-time MFA verification\n- Add a runtime admin security toggle to require MFA for all users later without a redeploy\n- Revive and wire the dormant 2FA frontend for local and social-login users, including required enrollment screens/gates and dark-mode setup readability fixes",
+    "publishedAt": "2026-03-08T20:49:53Z",
     "tagName": "v2.14.0",
-    "title": "v2.14.0",
-    "publishedAt": "2026-03-08T21:00:00Z",
-    "body": "**Minor release — TOTP MFA enrollment and enforcement**\n\n- **Google Authenticator-compatible MFA:** add TOTP enrollment, QR setup, verification, disable flow, and single-use backup codes backed by the Flask API\n- **Login enforcement:** admins must enroll in MFA before accessing the app; users can enroll optionally by default, and the backend issues a short-lived temp token for login-time MFA verification\n- **Admin security policy:** new runtime admin setting to require MFA for all users later without a redeploy, stored in auth-assistant org security config and surfaced in User Management\n- **Frontend integration:** revive the dormant 2FA UI, expose it for social-login users too, add required enrollment screens/gates, and improve dark-mode readability during setup"
+    "title": "v2.14.0"
   },
   {
+    "body": "**Hotfix release \u2014 deployment monitoring and version visibility**\n\n- **`/health` endpoint now reports version** \u2014 `GET /health` returns `{\"status\": \"ok\", \"version\": \"2.13.3\"}` so the deployed version is visible without auth. Version is read from `pyproject.toml` at startup via stdlib `tomllib`.\n- **`pyproject.toml` version synced** \u2014 backend package version now tracks the release version (was stuck at `2.0.0`).\n- **`scripts/nash-watchdog.sh`** \u2014 new watchdog script polls `/health` and `/api/init` every 5 seconds to detect the non-responsive condition; deployed version appears on every output line so deployment rollovers are visible in the feed.\n- **`start.sh`** \u2014 add `--timeout 0` to gunicorn args to match the production Dockerfile.",
+    "publishedAt": "2026-03-08T20:06:09Z",
     "tagName": "v2.13.3",
-    "title": "v2.13.3",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Hotfix release — deployment monitoring and version visibility**\n\n- **`/health` endpoint now reports version** — `GET /health` returns `{\"status\": \"ok\", \"version\": \"2.13.3\"}` so the deployed version is visible without auth.\n- **`pyproject.toml` version synced** — backend package version now tracks the release version and is read by the health endpoint at startup via stdlib `tomllib`.\n- **`scripts/nash-watchdog.sh`** — new watchdog script polls `/health` and `/api/init` every 5 seconds to detect the non-responsive condition; version appears on every output line so deployment rollovers are visible in the feed.\n- **`start.sh`** — add `--timeout 0` to match the production Dockerfile gunicorn args."
+    "title": "v2.13.3"
   },
   {
+    "body": "**Hotfix release \u2014 terms acceptance at login/registration**\n\n- Replace the flaky post-login ToS modal (which could be dismissed by a config refetch) with a full-page blocking gate that renders instead of the app until terms are explicitly accepted\n- Decline button logs the user out and redirects to the login page\n- Registration form now requires a mandatory checkbox agreeing to Terms of Service and Privacy Policy before the submit button is enabled\n- Backend stamps `termsAcceptedAt` at account creation time so new registrations are pre-recorded\n- Wire `HELP_AND_FAQ_URL=/docs` into Terraform env config",
+    "publishedAt": "2026-03-08T19:52:26Z",
     "tagName": "v2.13.2",
-    "title": "v2.13.2",
-    "publishedAt": "2026-03-08T20:00:00Z",
-    "body": "**Hotfix release — terms acceptance at login/registration**\n\n- Replace the flaky post-login ToS modal (which could be dismissed by a config refetch) with a full-page blocking gate that renders instead of the app until terms are explicitly accepted\n- Decline button logs the user out and redirects to the login page\n- Registration form now requires a mandatory checkbox agreeing to Terms of Service and Privacy Policy before the submit button is enabled\n- Backend stamps `termsAcceptedAt` at account creation time so new registrations are pre-recorded"
+    "title": "v2.13.2"
   },
   {
+    "body": "**Hotfix release \u2014 referral badge UX on login page**\n\n- Move referral rewards panel off the login form into a compact badge pinned to the top-right corner of the viewport. Badge expands into a popover card on click, freeing up real estate on the login screen.",
+    "publishedAt": "2026-03-08T19:18:44Z",
     "tagName": "v2.13.1",
-    "title": "v2.13.1",
-    "publishedAt": "2026-03-08T19:20:00Z",
-    "body": "**Hotfix release — referral badge UX on login page**\n\n- Move referral rewards panel off the login form into a compact badge pinned to the top-right corner of the viewport. Badge expands into a popover card on click, freeing up real estate on the login screen."
+    "title": "v2.13.1"
   },
   {
+    "body": "**Minor release \u2014 SOC2 compliance foundations**\n\n- **Legal pages:** `/privacy`, `/terms`, `/cookies`, `/docs` (Help & FAQ) \u2014 publicly accessible, no login required, linked from all footers and auth pages\n- **ToS modal:** First-time acceptance modal for authenticated users; acceptance timestamp stored on the user record in Backboard\n- **Cookie consent banner:** GDPR-style fixed banner with Accept / Essential-only options, stored in `localStorage`\n- **Audit logging:** Structured JSON audit events to stdout (\u2192 CloudWatch) covering login success/failure, register, logout, token refresh, OAuth, account lockout, ToS acceptance, account deletion, rate limit blocks, and 5xx errors\n- **Rate limiting:** Per-IP limits on login (10/min), register (5/hr), refresh (60/min), OAuth (20/min), and a global 300/min default via `flask-limiter`\n- **Account lockout:** 5 consecutive login failures within 15 minutes locks the account for 15 minutes (in-memory, thread-safe)\n- **CSRF protection:** `Sec-Fetch-Site` + `Origin` header validation on cookie-authenticated endpoints (`/refresh`, `/logout`)\n- **Full account deletion:** `DELETE /api/user/account` cancels Stripe subscription and wipes all Backboard assistant data (right to erasure)\n- **CloudWatch alarms (Terraform):** Log group retention (90 days), SNS topic, CloudWatch metric filters, and alarms for login failure spikes, rate limit blocks, server errors, and lockout events\n- **Footer links:** Privacy, Terms, Cookies, Status (StatusGator), and Support (email) on all pages; `STATUS_PAGE_URL` / `SUPPORT_URL` env-configurable\n- **Help & FAQ (`/docs`):** New in-app page with six sections covering models, billing, data privacy, account management, and troubleshooting\n- **Registration:** \"By creating an account you agree to our Terms & Privacy Policy\" acknowledgement with inline links",
+    "publishedAt": "2026-03-08T19:04:13Z",
     "tagName": "v2.13.0",
-    "title": "v2.13.0",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Minor release — SOC2 compliance foundations**\n\n- **Legal pages:** `/privacy`, `/terms`, `/cookies`, `/docs` (Help & FAQ) — publicly accessible, no login required, linked from all footers\n- **ToS modal:** First-time acceptance modal for authenticated users; acceptance timestamp recorded on user record in Backboard\n- **Cookie consent banner:** GDPR-style banner with Accept / Essential-only choice, stored in localStorage\n- **Audit logging:** Structured JSON audit log (stdout → CloudWatch) for all auth events: login success/failure, register, logout, token refresh, OAuth, lockout, ToS acceptance, data deletion, rate limit blocks, 5xx errors\n- **Rate limiting:** Per-IP limits on login (10/min), register (5/hr), refresh (60/min), OAuth (20/min), and a 300/min global default via flask-limiter\n- **Account lockout:** 5 consecutive login failures within 15 minutes locks the account for 15 minutes\n- **CSRF protection:** `Sec-Fetch-Site` + Origin header check on refresh and logout endpoints\n- **Full account deletion:** `DELETE /api/user/account` cancels Stripe subscription and wipes all Backboard data\n- **CloudWatch alarms (Terraform):** Log group retention (90 days), SNS topic, metric filters, and alarms for login failures, rate limit spikes, server errors, and lockouts\n- **Footer:** Privacy, Terms, Cookies, Status (StatusGator), Support (email) links on all pages; configurable via `STATUS_PAGE_URL` / `SUPPORT_URL` env vars\n- **Help & FAQ:** New `/docs` page with six sections covering models, billing, data privacy, account management, and troubleshooting\n- **Registration:** \"By creating an account you agree to our Terms\" text with links\n- **Help & FAQ nav item:** Points to `/docs` (was nash.backboard.io)"
+    "title": "v2.13.0"
   },
   {
+    "body": "**Hotfix release \u2014 gunicorn worker stability**\n\n- Fix App Runner slowdown after a few hours caused by in-memory stream state (`_streams` dict) being split across two gunicorn worker processes. A `POST /api/agents/chat` on Worker A would create a stream entry that `GET /api/agents/chat/stream/:id` on Worker B couldn't find, causing \"Request aborted\" errors in the browser.\n- Switch production Docker image to a single gevent worker (`--workers 1`) with `--timeout 0` so all stream state lives in one process and long-running SSE connections are never killed by the default 30s worker timeout.",
+    "publishedAt": "2026-03-08T17:05:09Z",
     "tagName": "v2.12.4",
-    "title": "v2.12.4",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Hotfix release — gunicorn worker stability**\n\n- Fix App Runner slowdown after a few hours caused by in-memory stream state being split across two gunicorn worker processes. Switch to a single gevent worker with `--timeout 0` so all stream state lives in one process and SSE connections are never incorrectly terminated by the worker timeout."
+    "title": "v2.12.4"
   },
   {
+    "body": "**Hotfix release \u2014 folder conversation routing and delete fixes**\n\n- **Bug fix: replying in a folder thread always starts a new conversation** \u2014 Clicking a folder thread now properly initializes the frontend conversation state via `navigateToConvo` (fetching full conversation data including `folderId`). Previously `handleConvoClick` only changed the URL, leaving the Recoil atom stuck at `conversationId: \"new\"` which caused every reply to create a new thread.\n- **Bug fix: `GET /api/convos/<id>` returns 404 for old folder conversations** \u2014 Backend now falls back to scanning folder BB assistants when a conversation isn't found in the main assistant metadata, synthesizes and persists the missing `conversation_meta`, and returns it so the frontend correctly routes subsequent messages.\n- **Bug fix: deleting a folder conversation shows 'New Chat' instead of removing it** \u2014 `DELETE /api/convos` now also removes the `thread_mapping` memory from the folder's BB assistant so the conversation disappears from the folder listing entirely.",
+    "publishedAt": "2026-03-08T14:23:59Z",
     "tagName": "v2.12.3",
-    "title": "v2.12.3",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Hotfix release — folder conversation routing and delete fixes**\n\n- **Bug fix: replying in a folder thread always starts a new conversation** — Clicking a folder thread now properly initializes the frontend conversation state via `navigateToConvo` (fetching full conversation data including `folderId`). Previously `handleConvoClick` only changed the URL, leaving the Recoil atom stuck at `conversationId: \"new\"` which caused every reply to create a new thread.\n- **Bug fix: `GET /api/convos/<id>` returns 404 for old folder conversations** — Backend now falls back to scanning folder BB assistants when a conversation isn't found in the main assistant metadata, synthesizes and persists the missing `conversation_meta`, and returns it so the frontend correctly routes subsequent messages.\n- **Bug fix: deleting a folder conversation shows 'New Chat' instead of removing it** — `DELETE /api/convos` now also removes the `thread_mapping` memory from the folder's BB assistant so the conversation disappears from the folder listing entirely."
+    "title": "v2.12.3"
   },
   {
+    "body": "**Hotfix release \u2014 eliminate folder conversation bleed into main list**\n\n- New folder conversations now eagerly write `hidden: true` + `folderId` to `conversation_meta` at thread creation time, before streaming begins. Previously there was a window during the first stream where the conversation could appear in the main chat list.",
+    "publishedAt": "2026-03-08T02:39:24Z",
     "tagName": "v2.12.2",
-    "title": "v2.12.2",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Hotfix release — eliminate folder conversation bleed into main list**\n\n- New folder conversations now eagerly write `hidden: true` + `folderId` to `conversation_meta` at thread creation time, before streaming begins. Previously there was a window during the first stream where the conversation could appear in the main chat list."
+    "title": "v2.12.2"
   },
   {
+    "body": "**Hotfix release \u2014 folder conversation listing rewrite**\n\n- **Folder-native listing** \u2014 Folder conversation lists now enumerate `thread_mapping` memories directly from the folder's Backboard assistant instead of filtering by a `folderId` tag. Conversations appear immediately upon creation, not only after title generation completes.\n- **Main list suppression** \u2014 Conversations in folders are hidden from the main chat list via a `hidden` flag, ensuring clean separation.\n- **Move to folder (create/copy/hide)** \u2014 Moving a conversation into a folder writes a `thread_mapping` on the folder's assistant pointing at the existing Backboard thread (no messages copied, no tokens consumed) and marks the conversation hidden in the main list. Moving out reverses both steps.\n- **Multi-folder move** \u2014 Moving a conversation from one folder to another correctly removes the old `thread_mapping` before writing the new one.",
+    "publishedAt": "2026-03-08T02:35:37Z",
     "tagName": "v2.12.1",
-    "title": "v2.12.1",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Hotfix release — folder conversation listing rewrite**\n\n- **Folder-native listing** — Folder conversation lists now enumerate `thread_mapping` memories directly from the folder's Backboard assistant instead of filtering by a `folderId` tag. Conversations appear immediately upon creation, not only after title generation completes.\n- **Main list suppression** — Conversations in folders are hidden from the main chat list via a `hidden` flag, ensuring clean separation.\n- **Move to folder (create/copy/hide)** — Moving a conversation into a folder writes a `thread_mapping` on the folder's assistant pointing at the existing Backboard thread (no messages copied, no tokens consumed) and marks the conversation hidden in the main list. Moving out reverses both steps.\n- **Multi-folder move** — Moving a conversation from one folder to another correctly removes the old `thread_mapping` before writing the new one."
+    "title": "v2.12.1"
   },
   {
+    "body": "**Minor release \u2014 folder isolation and memory management**\n\n- **Folder isolation** \u2014 Each new folder gets its own dedicated Backboard assistant. Conversations inside a folder use that assistant's thread and context, fully isolated from the main chat and other folders. The create-folder modal now defaults to isolated mode.\n- **Folder memory import** \u2014 Import button on the folder landing page opens the two-step ChatGPT export flow, writing memories directly into the folder's Backboard assistant.\n- **Folder memory browser** \u2014 Brain icon button opens a searchable modal listing all memories in the folder assistant, with per-item delete (two-tap confirm).\n- **gen_title fix** \u2014 Title generation correctly resolves threads for folder conversations after a server restart via folder-assistant thread mapping fallback.\n- **UI polish** \u2014 Folder landing page title clears the header bar, footer version/slot-machine text sits at the correct absolute position matching the landing page.",
+    "publishedAt": "2026-03-08T01:55:27Z",
     "tagName": "v2.12.0",
-    "title": "v2.12.0",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "# Nash v2.12.0\n\n**Folder isolation and memory management**\n\n- **Folder isolation** — Each new folder gets its own dedicated Backboard assistant. Conversations inside a folder use that assistant's thread and context, fully isolated from the main chat and from other folders. Default in the create-folder modal is now isolated.\n- **Folder memory import** — Import button on the folder landing page opens the same two-step ChatGPT export flow as the global memories drawer, but writes memories directly into the folder's assistant.\n- **Folder memory browser** — Brain icon button opens a searchable modal listing all memories stored in the folder assistant, with per-item delete (two-tap confirm).\n- **gen_title fix** — Title generation now correctly resolves threads for folder conversations after a server restart by falling back to the folder's assistant thread mappings.\n- **Folder UI polish** — Folder landing page title clears the header bar (pt-20), footer version/slot-machine text matches landing page position."
+    "title": "v2.12.0"
   },
   {
+    "body": "**Hotfix release**\n\n- Fix slot machine footer text clipping on wider phrases by sizing container to the widest rendered phrase.\n- Increase court canvas rotation to 70\u201390\u00b0 for a more abstract, less diagram-like background.",
+    "publishedAt": "2026-03-08T00:45:20Z",
     "tagName": "v2.11.1",
-    "title": "v2.11.1",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Hotfix release**\n\n- Fix slot machine footer text clipping on wider phrases by sizing container to the widest rendered phrase.\n- Increase court canvas rotation to 70–90° for a more abstract, less diagram-like background."
+    "title": "v2.11.1"
   },
   {
+    "body": "**Minor release**\n\n- **Slot machine footer tagline:** The static \"Every AI for Everyone.\" footer text now cycles through rotating phrases with a smooth drop-in animation matching the greeting text style.\n- **Ambient basketball court canvas:** The landing page background features a subliminal, massively-scaled half-court line drawing that breathes with a slow opacity pulse. Slightly different angle each page load.\n- New `CourtCanvas` and `SlotMachineText` components.",
+    "publishedAt": "2026-03-08T00:38:19Z",
     "tagName": "v2.11.0",
-    "title": "v2.11.0",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Minor release**\n\n- **Slot machine footer tagline:** The static \"Every AI for Everyone.\" footer text now cycles through rotating phrases with a smooth drop-in animation matching the greeting text style.\n- **Ambient basketball court canvas:** The landing page background features a subliminal, massively-scaled half-court line drawing that breathes with a slow opacity pulse. Slightly different angle each page load.\n- New `CourtCanvas` and `SlotMachineText` components."
+    "title": "v2.11.0"
   },
   {
+    "body": "**Minor release**\n\n- **User management redesign:** Rebuilt the admin user management panel into a full-width two-column split-pane layout. User list on the left with avatar initials, role badges, and instant selection; detail panel on the right with plan selector, token usage progress bar, and inline save confirmations.\n- **Promo codes tab:** Moved promo code creation and management into a dedicated tab so it no longer competes with the user list for vertical space.\n- **Micro-interactions:** Added skeleton loading states, colored gradient avatars, animated save confirmations, and active-state button press feedback throughout the admin panel.",
+    "publishedAt": "2026-03-08T00:11:53Z",
     "tagName": "v2.10.0",
-    "title": "v2.10.0",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Minor release**\n\n- **User management redesign:** Rebuilt the admin user management panel into a full-width two-column split-pane layout. User list on the left with avatar initials, role badges, and instant selection; detail panel on the right with plan selector, token usage progress bar, and inline save confirmations.\n- **Promo codes tab:** Moved promo code creation and management into a dedicated tab so it no longer competes with the user list for vertical space.\n- **Micro-interactions:** Added skeleton loading states, colored gradient avatars, animated save confirmations, and active-state button press feedback throughout the admin panel."
+    "title": "v2.10.0"
   },
   {
+    "body": "**Hotfix release**\n\n- **Persona marketplace:** Add delete icon on each persona card in the model list (Personas / marketplace grid). Icon shows on hover on desktop and is always visible on mobile; confirm dialog before delete.\n- **Builder footer:** Move delete button next to the Save button in the builder so it is easy to find when editing a persona.",
+    "publishedAt": "2026-03-07T21:47:28Z",
     "tagName": "v2.9.5",
-    "title": "v2.9.5",
-    "publishedAt": "2026-03-08T00:00:00Z",
-    "body": "**Hotfix release**\n\n- **Persona marketplace:** Add delete icon on each persona card in the model list (Personas / marketplace grid). Icon shows on hover on desktop and is always visible on mobile; confirm dialog before delete.\n- **Builder footer:** Move delete button next to the Save button in the builder so it is easy to find when editing a persona."
+    "title": "v2.9.5"
   },
   {
+    "body": "**Hotfix release**\n\n- **Persona list/edit for users:** Fix \"Persona Not Available\" for non-admin users. The effective-permissions endpoint now returns the shape the client expects (`permissionBits`) and grants full permission for the user's own personas from their config assistant, so users can list and edit their own personas in the build panel.",
+    "publishedAt": "2026-03-07T21:40:52Z",
     "tagName": "v2.9.4",
-    "title": "v2.9.4",
-    "publishedAt": "2026-03-07T23:00:00Z",
-    "body": "**Hotfix release**\n\n- **Persona list/edit for users:** Fix \"Persona Not Available\" for non-admin users. The effective-permissions endpoint now returns the shape the client expects (`permissionBits`) and grants full permission for the user's own personas from their config assistant, so users can list and edit their own personas in the build panel."
+    "title": "v2.9.4"
   },
   {
+    "body": "**Hotfix release**\n\n- **Messages after persona/tool use:** Fix blank chat with spinner after a persona finishes. Backboard returns messages with role='tool'; the SDK Thread model only allowed user/assistant/system. We now fetch thread messages via raw JSON and normalize tool\u2192assistant so GET /api/messages works.\n- **Personas:** Add delete persona from the list (hover on desktop, always visible on mobile) and delete icon in builder header when a persona is selected.",
+    "publishedAt": "2026-03-07T21:15:51Z",
     "tagName": "v2.9.3",
-    "title": "v2.9.3",
-    "publishedAt": "2026-03-07T22:00:00Z",
-    "body": "**Hotfix release**\n\n- **Messages after persona/tool use:** Fix blank chat with spinner after a persona finishes. Backboard returns messages with role='tool'; the SDK Thread model only allowed user/assistant/system. We now fetch thread messages via raw JSON and normalize tool→assistant so GET /api/messages works.\n- **Personas:** Add delete persona from the list (hover on desktop, always visible on mobile) and delete icon in builder header when a persona is selected."
+    "title": "v2.9.3"
   },
   {
+    "body": "**Hotfix release**\n\n- **Clean console logs:** Upgrade `@ariakit/react` to 0.4.22 and remove the obsolete `setValueOnChange` prop from `MCPServerMenuItem` to eliminate a React DOM prop warning on every page load.",
+    "publishedAt": "2026-03-07T19:06:32Z",
     "tagName": "v2.9.2",
-    "title": "v2.9.2",
-    "publishedAt": "2026-03-07T21:30:00Z",
-    "body": "**Hotfix release**\n\n- **Clean console logs:** Upgrade `@ariakit/react` to 0.4.22 and remove the obsolete `setValueOnChange` prop from `MCPServerMenuItem` to eliminate a React DOM prop warning on every page load."
+    "title": "v2.9.2"
   },
   {
+    "body": "**Hotfix release**\n\n- **Billing pricing:** Fix Plus plan price display from $29.99 to $19.99 CAD on all billing screens.\n- **Downgrade flow:** Users on the Unlimited plan can now click a Downgrade button on the Free and Plus cards, which opens the Stripe customer portal to complete the plan change.",
+    "publishedAt": "2026-03-07T19:04:40Z",
     "tagName": "v2.9.1",
-    "title": "v2.9.1",
-    "publishedAt": "2026-03-07T21:00:00Z",
-    "body": "**Hotfix release**\n\n- **Billing pricing:** Fix Plus plan price display from $29.99 to $19.99 CAD on all billing screens.\n- **Downgrade flow:** Users on the Unlimited plan can now click a Downgrade button on the Free and Plus cards, which opens the Stripe customer portal to complete the plan change."
+    "title": "v2.9.1"
   },
   {
+    "body": "**Minor release**\n\n- **MCP server integration:** Add, delete, and use MCP servers in chat. Tools are fetched on creation, registered on the Backboard assistant, and called via a REQUIRES_ACTION tool loop. Tool names are prefixed with the server name so the model knows which server each tool belongs to.\n- **MCP persistence:** MCP server configs survive page reload via the `/api/init` response.\n- **MCP hover delete:** Hover over any MCP server card in the settings panel to reveal a delete button for quick removal and re-registration.\n- **Share links:** Fix public share lookup (GET) and deletion (DELETE) by moving share records to the global system assistant with per-user metadata tagging.\n- **Billing portal:** Auto-create a Stripe customer for users with manually granted plans so the billing portal always opens correctly.\n- **Auth:** Mark the refresh-token cookie as `secure=True` in the Google OAuth callback.",
+    "publishedAt": "2026-03-07T18:56:43Z",
     "tagName": "v2.9.0",
-    "title": "v2.9.0",
-    "publishedAt": "2026-03-07T20:00:00Z",
-    "body": "**Minor release**\n\n- **MCP server integration:** Add, delete, and use MCP servers in chat. Tools are fetched on creation, registered on the Backboard assistant, and called via a REQUIRES_ACTION tool loop. Tool names are prefixed with the server name so the model knows which server each tool belongs to.\n- **MCP persistence:** MCP server configs survive page reload via the `/api/init` response.\n- **MCP hover delete:** Hover over any MCP server card in the settings panel to reveal a delete button for quick removal and re-registration.\n- **Share links:** Fix public share lookup (GET) and deletion (DELETE) by moving share records to the global system assistant with per-user metadata tagging.\n- **Billing portal:** Auto-create a Stripe customer for users with manually granted plans so the billing portal always opens correctly.\n- **Auth:** Mark the refresh-token cookie as `secure=True` in the Google OAuth callback."
+    "title": "v2.9.0"
   },
   {
+    "body": "**Minor release**\n\n- **Thread forking:** Fork any conversation at any message \u2014 choose visible path, branches, or all-messages-to-target. Duplicate conversations in one click.\n- **Memory toggle labels:** Fix memory mode toggle so label always reflects the active state correctly.\n- **Persona creation:** Fix persona builder so new personas save and appear without requiring a page refresh.\n- **File uploads:** Reliability improvements to file attachment handling in the chat input.",
+    "publishedAt": "2026-03-07T17:27:08Z",
     "tagName": "v2.8.0",
-    "title": "v2.8.0",
-    "publishedAt": "2026-03-07T16:00:00Z",
-    "body": "**Minor release**\n\n- **Thread forking:** Fork any conversation at any message — choose visible path, branches, or all-messages-to-target. Duplicate conversations in one click.\n- **Memory toggle labels:** Fix memory mode toggle so label always reflects the active state correctly.\n- **Persona creation:** Fix persona builder so new personas save and appear without requiring a page refresh.\n- **File uploads:** Reliability improvements to file attachment handling in the chat input."
+    "title": "v2.8.0"
   },
   {
+    "body": "**Bugfix release**\n\n- **Mobile folder navigation:** Selecting a folder now closes the sidebar and switches to the chat view, matching the behavior of selecting a thread.\n- **Model search stability:** Fix a crash when searching models if an assistants endpoint has no assistants loaded yet (null-safe property access).\n- **Persona chat on mobile:** Tapping \"Start Chat\" on a persona now closes the sidebar so the chat view is visible immediately.",
+    "publishedAt": "2026-03-07T14:58:35Z",
     "tagName": "v2.7.2",
-    "title": "v2.7.2",
-    "publishedAt": "2026-03-07T07:00:00Z",
-    "body": "**Bugfix release**\n\n- **Mobile folder navigation:** Selecting a folder now closes the sidebar and switches to the chat view, matching the behavior of selecting a thread.\n- **Model search stability:** Fix a crash when searching models if an assistants endpoint has no assistants loaded yet (null-safe property access).\n- **Persona chat on mobile:** Tapping \"Start Chat\" on a persona now closes the sidebar so the chat view is visible immediately."
+    "title": "v2.7.2"
   },
   {
+    "body": "**Hotfix release**\n\n- **App Runner workers:** Restore Gunicorn to 2 workers in the Docker production image so App Runner health checks and concurrent connections work correctly.",
+    "publishedAt": "2026-03-07T06:22:44Z",
     "tagName": "v2.7.1",
-    "title": "v2.7.1",
-    "publishedAt": "2026-03-07T06:30:00Z",
-    "body": "**Hotfix release**\n\n- **App Runner workers:** Restore Gunicorn to 2 workers in the Docker production image so App Runner health checks and concurrent connections work correctly."
+    "title": "v2.7.1"
   },
   {
+    "body": "**Minor release**\n\n- **Smooth streaming:** Replaced the queue/background-thread streaming architecture with a direct pull-based pipeline (`iter_async`), eliminating an entire class of buffering and timing bugs.\n- **Progressive text reveal:** New client-side `useProgressiveText` hook reveals assistant responses at a steady visual pace (~640 chars/sec) regardless of how bursty the upstream delivery is, so text flows in smoothly instead of appearing in a single dump.\n- **Resume race condition fix:** Prevent duplicate `generate()` calls when the client reconnects to a still-active stream, fixing the double-header / HTTP 400 / chat-reset bug.\n- **Smoke test:** New `smoke-chat-stream-cadence.sh` script with timestamped SSE cadence analysis, direct Backboard comparison, and resume reconnect assertions.",
+    "publishedAt": "2026-03-07T05:55:22Z",
     "tagName": "v2.7.0",
-    "title": "v2.7.0",
-    "publishedAt": "2026-03-07T06:00:00Z",
-    "body": "**Minor release**\n\n- **Smooth streaming:** Replaced the queue/background-thread streaming architecture with a direct pull-based pipeline (`iter_async`), eliminating an entire class of buffering and timing bugs.\n- **Progressive text reveal:** New client-side `useProgressiveText` hook reveals assistant responses at a steady visual pace (~640 chars/sec) regardless of how bursty the upstream delivery is, so text flows in smoothly instead of appearing in a single dump.\n- **Resume race condition fix:** Prevent duplicate `generate()` calls when the client reconnects to a still-active stream, fixing the double-header / HTTP 400 / chat-reset bug.\n- **Smoke test:** New `smoke-chat-stream-cadence.sh` script with timestamped SSE cadence analysis, direct Backboard comparison, and resume reconnect assertions."
+    "title": "v2.7.0"
   },
   {
+    "body": "**Hotfix release**\n\n- **New-chat completion stability:** Stop newly created chats from falling back into stale resume state after the server assigns a real conversation ID.\n- **Stream lifecycle fix:** Keep resume-on-load from reattaching to a just-finished run when the route changes from `/c/new` to the real conversation, which prevented replies from settling and hid the thread until reload.\n- **Sidebar consistency:** Ensure completed chats are reflected in the conversations list immediately instead of waiting for a full page refresh.\n",
+    "publishedAt": "2026-03-07T03:22:37Z",
     "tagName": "v2.6.1",
-    "title": "v2.6.1",
-    "publishedAt": "2026-03-07T03:21:36Z",
-    "body": "**Hotfix release**\n\n- **New-chat completion stability:** Stop newly created chats from falling back into stale resume state after the server assigns a real conversation ID.\n- **Stream lifecycle fix:** Keep resume-on-load from reattaching to a just-finished run when the route changes from `/c/new` to the real conversation, which prevented replies from settling and hid the thread until reload.\n- **Sidebar consistency:** Ensure completed chats are reflected in the conversations list immediately instead of waiting for a full page refresh."
+    "title": "v2.6.1"
   },
   {
+    "body": "**Minor release**\n\n- **Responsive billing and settings navigation:** Move billing and settings into dedicated routes, extract a shared billing content view, improve mobile account-menu navigation, and tighten the pricing experience across desktop and small screens.\n- **Model selector tiers:** Add list-wide `Free`, `Fast`, and `Powerful` filters above the provider-grouped model picker, backed by explicit tier metadata in the model config payload.\n- **Chat stability and polish:** Retry aborted silent auth refreshes, improve final conversation/message handling in SSE completion paths, and surface the app version in mobile navigation.",
+    "publishedAt": "2026-03-07T01:41:50Z",
     "tagName": "v2.6.0",
-    "title": "v2.6.0",
-    "publishedAt": "2026-03-07T01:40:47Z",
-    "body": "**Minor release**\n\n- **Responsive billing and settings navigation:** Move billing and settings into dedicated routes, extract a shared billing content view, improve mobile account-menu navigation, and tighten the pricing experience across desktop and small screens.\n- **Model selector tiers:** Add list-wide `Free`, `Fast`, and `Powerful` filters above the provider-grouped model picker, backed by explicit tier metadata in the model config payload.\n- **Chat stability and polish:** Retry aborted silent auth refreshes, improve final conversation/message handling in SSE completion paths, and surface the app version in mobile navigation."
+    "title": "v2.6.0"
   },
   {
+    "body": "**Hotfix release**\n\n- **Login screen recovery:** Stop the auth refresh flow from clearing startup config during login-page bootstrap, which could leave the app stuck on the blinking Nash logo with only the referral card visible.\n- **Safer auth boot:** Treat empty refresh responses on public auth routes as a stable signed-out state instead of redirecting the user back into the same login route loop.\n- **Regression coverage:** Add a focused auth-context test so the no-session login path keeps rendering the actual sign-in UI.",
+    "publishedAt": "2026-03-07T00:02:46Z",
     "tagName": "v2.5.5",
-    "title": "v2.5.5",
-    "publishedAt": "2026-03-07T00:01:47Z",
-    "body": "**Hotfix release**\n\n- **Login screen recovery:** Stop the auth refresh flow from clearing startup config during login-page bootstrap, which could leave the app stuck on the blinking Nash logo with only the referral card visible.\n- **Safer auth boot:** Treat empty refresh responses on public auth routes as a stable signed-out state instead of redirecting the user back into the same login route loop.\n- **Regression coverage:** Add a focused auth-context test so the no-session login path keeps rendering the actual sign-in UI."
+    "title": "v2.5.5"
   },
   {
-    "tagName": "v2.5.4",
-    "title": "v2.5.4",
+    "body": "**Hotfix release**\n\n- **Billing modal layout:** Tighten the pricing cards, compress the overage and usage copy, and widen the dialog so the upgrade CTA stays visible without scrolling on typical desktop screens.\n- **Plan readability:** Reduce redundant plan bullets and shrink the Unlimited highlight block so the modal stays focused on choosing a plan instead of requiring a long read.",
     "publishedAt": "2026-03-06T23:44:51Z",
-    "body": "**Hotfix release**\n\n- **Billing modal layout:** Tighten the pricing cards, compress the overage and usage copy, and widen the dialog so the upgrade CTA stays visible without scrolling on typical desktop screens.\n- **Plan readability:** Reduce redundant plan bullets and shrink the Unlimited highlight block so the modal stays focused on choosing a plan instead of requiring a long read."
+    "tagName": "v2.5.4",
+    "title": "v2.5.4"
   },
   {
-    "tagName": "v2.5.3",
-    "title": "v2.5.3",
+    "body": "**Hotfix release**\n\n- **Chat stability and quieter logging:** Move resumable chat, query-param, and resume-on-load diagnostics behind the app logger so normal users are not flooded with console noise while chat recovery behavior stays easier to trace when logging is enabled.\n- **File upload MIME matching:** Normalize wildcard MIME patterns like `type/*` before building regexes so document/file config rules match reliably without repeated invalid-pattern spam.\n- **Referral and billing polish:** Move the referral CTA into the chat header, tighten when it appears during active conversations, clarify plan pricing/token allowances, and improve folder row click and keyboard behavior in the nav.",
     "publishedAt": "2026-03-06T23:38:27Z",
-    "body": "**Hotfix release**\n\n- **Chat stability and quieter logging:** Move resumable chat, query-param, and resume-on-load diagnostics behind the app logger so normal users are not flooded with console noise while chat recovery behavior stays easier to trace when logging is enabled.\n- **File upload MIME matching:** Normalize wildcard MIME patterns like `type/*` before building regexes so document/file config rules match reliably without repeated invalid-pattern spam.\n- **Referral and billing polish:** Move the referral CTA into the chat header, tighten when it appears during active conversations, clarify plan pricing/token allowances, and improve folder row click/keyboard behavior in the nav."
+    "tagName": "v2.5.3",
+    "title": "v2.5.3"
   },
   {
-    "tagName": "v2.5.2",
-    "title": "v2.5.2",
+    "body": "**Hotfix release**\n\n- **Audio playback disabled:** Remove the hidden `silence.mp3` autoplay iframe so the app no longer attempts browser audio playback on load.\n- **Message TTS disabled:** Remove the chat message read-aloud control so assistant messages cannot trigger browser or external text-to-speech playback.\n- **Auto-playback disabled:** Stop mounting stream-audio playback in the chat form so text-to-speech audio cannot auto-play during chat.",
     "publishedAt": "2026-03-06T23:01:26Z",
-    "body": "**Hotfix release**\n\n- **Audio playback disabled:** Remove the hidden `silence.mp3` autoplay iframe so the app no longer attempts browser audio playback on load.\n- **Message TTS disabled:** Remove the chat message read-aloud control so assistant messages cannot trigger browser or external text-to-speech playback.\n- **Auto-playback disabled:** Stop mounting stream-audio playback in the chat form so text-to-speech audio cannot auto-play during chat."
+    "tagName": "v2.5.2",
+    "title": "v2.5.2"
   },
   {
-    "tagName": "v2.5.1",
-    "title": "v2.5.1",
+    "body": "**Hotfix release**\n\n- **Temporary Chat memory safety:** Turning on Temporary Chat now forces the effective memory mode to `Off` in the chat UI instead of leaving the prior `Auto` selection visible.\n- **Backboard request enforcement:** Temporary chats now send memory `off` through the Python streaming path, so request behavior matches the UI and avoids saving chat memory during temporary sessions.\n- **Type safety:** Add the ephemeral-agent memory mode to the shared data-provider type so the Temporary Chat and memory toggle state stay aligned.",
     "publishedAt": "2026-03-06T22:57:36Z",
-    "body": "**Hotfix release**\n\n- **Temporary Chat memory safety:** Turning on Temporary Chat now forces the effective memory mode to `Off` in the chat UI instead of leaving the prior `Auto` selection visible.\n- **Backboard request enforcement:** Temporary chats now send memory `off` through the Python streaming path, so request behavior matches the UI and avoids saving chat memory during temporary sessions.\n- **Type safety:** Add the ephemeral-agent memory mode to the shared data-provider type so the Temporary Chat and memory toggle state stay aligned."
+    "tagName": "v2.5.1",
+    "title": "v2.5.1"
   },
   {
+    "body": "**Minor release**\n\n- **Referrals and promo codes:** Add Backboard-backed referral codes, promo-code redemption, referral reward accounting, and admin promo management.\n- **Pricing and billing:** Keep the existing tiers, add pay-as-you-go metered overage support after included monthly usage is exhausted, and expand Stripe checkout/webhook handling for overage items.\n- **Account, login, and chat UI:** Add a referral panel in Settings/Account, a shortcut on the account card, and more prominent referral CTAs on the login and chat landing screens.\n- **Credits foundation:** Replace the placeholder balance endpoint with a real token-credit balance and immutable ledger for promo and referral rewards.",
+    "publishedAt": "2026-03-06T22:53:17Z",
     "tagName": "v2.5.0",
-    "title": "v2.5.0",
-    "publishedAt": "2026-03-06T22:52:13Z",
-    "body": "**Minor release**\n\n- **Referrals and promo codes:** Add Backboard-backed referral codes, promo-code redemption, referral reward accounting, and admin promo management.\n- **Pricing and billing:** Keep the existing tiers, add pay-as-you-go metered overage support after included monthly usage is exhausted, and expand Stripe checkout/webhook handling for overage items.\n- **Account, login, and chat UI:** Add a referral panel in Settings/Account, a shortcut on the account card, and more prominent referral CTAs on the login and chat landing screens.\n- **Credits foundation:** Replace the placeholder balance endpoint with a real token-credit balance and immutable ledger for promo and referral rewards."
+    "title": "v2.5.0"
   },
   {
-    "tagName": "v2.4.5",
-    "title": "v2.4.5",
+    "body": "**Bugfix release**\n\n- **Google OAuth signup:** Fix Backboard user-memory creation in `create_user()` to handle dict-shaped `add_memory()` responses instead of assuming an object with `.id`.\n- **Auth stability:** Prevent new social sign-ins from crashing after a successful Backboard `201 Created` when the user record is first persisted.",
     "publishedAt": "2026-03-06T21:01:49Z",
-    "body": "**Bugfix release**\n\n- **Google OAuth signup:** Fix Backboard user-memory creation in `create_user()` to handle dict-shaped `add_memory()` responses instead of assuming an object with `.id`.\n- **Auth stability:** Prevent new social sign-ins from crashing after a successful Backboard `201 Created` when the user record is first persisted."
+    "tagName": "v2.4.5",
+    "title": "v2.4.5"
   },
   {
+    "body": "**Hotfix release**\n\n- **Backboard web search:** Agent chat now forwards the selected model and `web_search=Auto` through the Python streaming path, so the Web Search toggle reaches Backboard instead of being ignored.\n- **Safer fallback:** If a selected model rejects tool use, chat retries once without web search instead of failing the turn outright.\n- **Git ignore cleanup:** Ignore nested Terraform lockfiles and `.terraform/` directories consistently in git.",
+    "publishedAt": "2026-03-06T20:52:06Z",
     "tagName": "v2.4.4",
-    "title": "v2.4.4",
-    "publishedAt": "2026-03-06T20:51:32Z",
-    "body": "**Hotfix release**\n\n- **Backboard web search:** Agent chat now forwards the selected model and `web_search=Auto` through the Python streaming path, so the Web Search toggle reaches Backboard instead of being ignored.\n- **Safer fallback:** If a selected model rejects tool use, chat retries once without web search instead of failing the turn outright.\n- **Git ignore cleanup:** Ignore nested Terraform lockfiles and `.terraform/` directories consistently in git."
+    "title": "v2.4.4"
   },
   {
     "body": "**Hotfix release**\n\n- **Release notes modal:** Footer version links now open an in-app release notes modal backed by the local release notes mirror for this private repo.\n- **Sidebar layout:** Favorites now render directly in the main nav instead of inside the virtualized conversations list, keeping the chat list simpler and more stable.\n- **Housekeeping:** Ignore local `.cursor/` files in git and refresh the Python lockfile entries already present for `gevent`.",

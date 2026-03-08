@@ -371,6 +371,7 @@ export const addTagToConversation = (conversationId: string) =>
 
 export const userTerms = () => `${BASE_URL}/api/user/terms`;
 export const acceptUserTerms = () => `${BASE_URL}/api/user/terms/accept`;
+export const userChatAssistant = () => `${BASE_URL}/api/user/chat-assistant`;
 export const banner = () => `${BASE_URL}/api/banner`;
 
 // Message Feedback

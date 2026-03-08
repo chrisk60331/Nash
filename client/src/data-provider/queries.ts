@@ -536,3 +536,17 @@ export const useUserTermsQuery = (
     ...config,
   });
 };
+
+export const useGetChatAssistantQuery = (
+  config?: UseQueryOptions<t.TChatAssistantResponse>,
+): QueryObserverResult<t.TChatAssistantResponse> => {
+  return useQuery<t.TChatAssistantResponse>(
+    [QueryKeys.chatAssistant],
+    () => dataService.getChatAssistant(),
+    {
+      refetchOnWindowFocus: false,
+      staleTime: 60 * 1000,
+      ...config,
+    },
+  );
+};

@@ -982,6 +982,16 @@ export function acceptTerms(): Promise<t.TAcceptTermsResponse> {
   return request.post(endpoints.acceptUserTerms());
 }
 
+export function getChatAssistant(): Promise<t.TChatAssistantResponse> {
+  return request.get(endpoints.userChatAssistant());
+}
+
+export function updateChatAssistant(
+  payload: { system_prompt: string },
+): Promise<t.TChatAssistantResponse> {
+  return request.patch(endpoints.userChatAssistant(), payload);
+}
+
 export function getBanner(): Promise<t.TBannerResponse> {
   return request.get(endpoints.banner());
 }

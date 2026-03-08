@@ -5,6 +5,7 @@ import { ForkSettings } from './ForkSettings';
 import ChatDirection from './ChatDirection';
 import ToggleSwitch from '../ToggleSwitch';
 import store from '~/store';
+import ChatAssistantPromptCard from '~/components/ChatAssistantPrompt/ChatAssistantPromptCard';
 
 const toggleSwitchConfigs = [
   {
@@ -89,6 +90,12 @@ const toggleSwitchConfigs = [
 function Chat() {
   return (
     <div className="flex flex-col gap-3 p-1 text-sm text-text-primary">
+      <section aria-labelledby="chat-assistant-prompt-heading" className="pb-4">
+        <h2 id="chat-assistant-prompt-heading" className="sr-only">
+          Chat assistant system prompt
+        </h2>
+        <ChatAssistantPromptCard variant="settings" className="w-full" />
+      </section>
       <div className="pb-3">
         <FontSizeSelector />
       </div>

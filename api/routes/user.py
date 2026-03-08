@@ -120,6 +120,54 @@ def accept_terms():
     return jsonify({"message": "ok", "termsAcceptedAt": accepted_at})
 
 
+@user_bp.route("/api/user/chat-assistant", methods=["GET"])
+@require_jwt
+def get_chat_assistant():
+    """Return the authenticated user's chat assistant system prompt."""
+    try:
+        assistant_id = get_user_assistant_id(g.user_id)
+    except ValueError:
+        return jsonify({"error": "User has no chat assistant"}), 404
+
+    async def _fetch():
+        client = get_client()
+        assistant = await client.get_assistant(assistant_id)
+        prompt = getattr(assistant, "system_prompt", None) or getattr(
+            assistant, "instructions", None
+        ) or ""
+        return str(prompt) if prompt is not None else ""
+
+    system_prompt = run_async(_fetch())
+    return jsonify({"system_prompt": system_prompt})
+
+
+@user_bp.route("/api/user/chat-assistant", methods=["PATCH"])
+@require_jwt
+def update_chat_assistant():
+    """Update the authenticated user's chat assistant system prompt."""
+    data = request.get_json(silent=True) or {}
+    system_prompt = data.get("system_prompt")
+    if system_prompt is None:
+        return jsonify({"error": "system_prompt is required"}), 400
+    system_prompt = str(system_prompt).strip()
+
+    try:
+        assistant_id = get_user_assistant_id(g.user_id)
+    except ValueError:
+        return jsonify({"error": "User has no chat assistant"}), 404
+
+    async def _update():
+        client = get_client()
+        await client.update_assistant(
+            assistant_id=assistant_id,
+            system_prompt=system_prompt or "",
+        )
+
+    run_async(_update())
+    audit_service.emit("user.chat_assistant_updated", user_id=g.user_id)
+    return jsonify({"system_prompt": system_prompt or ""})
+
+
 @user_bp.route("/api/user/account", methods=["DELETE"])
 @require_jwt
 def delete_account():

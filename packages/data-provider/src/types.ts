@@ -672,6 +672,10 @@ export type TAcceptTermsResponse = {
   success: boolean;
 };
 
+export type TChatAssistantResponse = {
+  system_prompt: string;
+};
+
 export type TBannerResponse = TBanner | null;
 
 export type TUpdateFeedbackRequest = {

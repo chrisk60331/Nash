@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Blocks, MCPIcon, AttachmentIcon } from '@librechat/client';
-import { Database, Bookmark, ArrowRightToLine, MessageSquareQuote } from 'lucide-react';
+import { Database, Bookmark, ArrowRightToLine, MessageSquareQuote, MessageSquare } from 'lucide-react';
 import {
   Permissions,
   EModelEndpoint,
@@ -17,6 +17,7 @@ import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
 import PromptsAccordion from '~/components/Prompts/PromptsAccordion';
 import MemoryPanelGated from '~/components/SidePanel/Memories/MemoryPanelGated';
 import FilesPanelGated from '~/components/SidePanel/Files/FilesPanelGated';
+import ChatAssistantPromptCard from '~/components/ChatAssistantPrompt/ChatAssistantPromptCard';
 import { useHasAccess, useMCPServerManager } from '~/hooks';
 
 export default function useSideNavLinks({
@@ -113,6 +114,14 @@ export default function useSideNavLinks({
         Component: PromptsAccordion,
       });
     }
+
+    links.push({
+      title: 'com_sidepanel_chat_assistant_prompt',
+      label: '',
+      icon: MessageSquare,
+      id: 'chat-assistant-prompt',
+      Component: ChatAssistantPromptCard,
+    });
 
     if (hasAccessToMemories && hasAccessToReadMemories) {
       links.push({
