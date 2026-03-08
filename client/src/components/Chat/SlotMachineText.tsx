@@ -71,13 +71,20 @@ export default function SlotMachineText({ className }: { className?: string }) {
         verticalAlign: 'bottom',
         position: 'relative',
         height: '1.4em',
-        minWidth: '12ch',
       }}
     >
+      {PHRASES.map((phrase) => (
+        <span key={phrase} aria-hidden="true" style={{ visibility: 'hidden', whiteSpace: 'nowrap', display: 'block', height: 0, lineHeight: '1.4em' }}>
+          {phrase}
+        </span>
+      ))}
       <span
         key={current}
         style={{
           display: 'block',
+          position: 'absolute',
+          left: 0,
+          top: 0,
           transform: startTransform ?? transform,
           opacity,
           transition,

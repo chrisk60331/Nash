@@ -3,9 +3,9 @@ import { useRef, useLayoutEffect } from 'react';
 export default function CourtCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const variation = useRef({
-    rotation: 2 + Math.random() * 4,
-    offsetX: 0.44 + Math.random() * 0.12,
-    offsetY: 1.45 + Math.random() * 0.2,
+    rotation: 70 + Math.random() * 20,
+    offsetX: 0.3 + Math.random() * 0.4,
+    offsetY: 1.2 + Math.random() * 0.6,
   });
 
   useLayoutEffect(() => {
