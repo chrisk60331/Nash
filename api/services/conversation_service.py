@@ -145,6 +145,64 @@ def delete_conversation_meta(assistant_id: str, conversation_id: str) -> bool:
     return run_async(_delete_conversation_meta(assistant_id, conversation_id))
 
 
+async def _list_folder_conversation_ids(folder_bb_assistant_id: str) -> list[dict]:
+    """Return list of {conversationId, threadId} from thread_mapping memories on a folder's BB assistant."""
+    await _load_thread_mappings(folder_bb_assistant_id)
+    client = get_client()
+    response = await client.get_memories(folder_bb_assistant_id)
+    results = []
+    seen: set[str] = set()
+    for m in response.memories:
+        meta = m.metadata or {}
+        if meta.get("type") != THREAD_MAP_TYPE:
+            continue
+        cid = meta.get("conversationId", "")
+        tid = meta.get("threadId", "")
+        if cid and cid not in seen:
+            seen.add(cid)
+            results.append({"conversationId": cid, "threadId": tid})
+    return results
+
+
+def list_folder_conversation_ids(folder_bb_assistant_id: str) -> list[dict]:
+    return run_async(_list_folder_conversation_ids(folder_bb_assistant_id))
+
+
+async def _add_thread_mapping(assistant_id: str, conversation_id: str, thread_id: str) -> None:
+    """Write a thread_mapping memory on the given assistant and update the in-process cache."""
+    client = get_client()
+    _thread_map[conversation_id] = thread_id
+    await client.add_memory(
+        assistant_id=assistant_id,
+        content=f"{conversation_id}->{thread_id}",
+        metadata={
+            "type": THREAD_MAP_TYPE,
+            "conversationId": conversation_id,
+            "threadId": thread_id,
+        },
+    )
+
+
+def add_thread_mapping(assistant_id: str, conversation_id: str, thread_id: str) -> None:
+    run_async(_add_thread_mapping(assistant_id, conversation_id, thread_id))
+
+
+async def _remove_thread_mapping(assistant_id: str, conversation_id: str) -> bool:
+    """Delete the thread_mapping memory for a conversation on the given assistant."""
+    client = get_client()
+    response = await client.get_memories(assistant_id)
+    for m in response.memories:
+        meta = m.metadata or {}
+        if meta.get("type") == THREAD_MAP_TYPE and meta.get("conversationId") == conversation_id:
+            await client.delete_memory(assistant_id=assistant_id, memory_id=m.id)
+            return True
+    return False
+
+
+def remove_thread_mapping(assistant_id: str, conversation_id: str) -> bool:
+    return run_async(_remove_thread_mapping(assistant_id, conversation_id))
+
+
 def get_conversation_forked_messages(assistant_id: str, conversation_id: str) -> list | None:
     """Return the forked message snapshot for a conversation, or None if not a fork."""
     convos = list_conversations(assistant_id)

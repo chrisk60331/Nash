@@ -272,10 +272,9 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         except Exception:
             logger.exception("Failed to resolve bb_assistant_id for agent_id=%s", agent_id)
 
+    folder_id = payload.get("folderId", "") if not agent_bb_assistant_id else ""
     folder_bb_assistant_id = ""
-    if not agent_bb_assistant_id:
-        folder_id = payload.get("folderId", "")
-        if folder_id:
+    if not agent_bb_assistant_id and folder_id:
             try:
                 folder_bb_assistant_id = run_async(_get_folder_bb_assistant_id(config_assistant_id, folder_id))
                 if folder_bb_assistant_id:
@@ -350,6 +349,7 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         "config_assistant_id": config_assistant_id,
         "thread_id": thread_id,
         "conversation_id": conversation_id,
+        "folder_id": folder_id,
         "user_text": user_text,
         "model": model,
         "endpoint": endpoint,
@@ -697,11 +697,10 @@ def stream_chat(stream_id):
             title += "..."
 
         try:
-            run_async(_save_conversation_meta(ctx["assistant_id"], conversation_id, {
-                "title": title,
-                "endpoint": endpoint,
-                "model": model,
-            }))
+            meta = {"title": title, "endpoint": endpoint, "model": model}
+            if ctx.get("folder_id"):
+                meta["folderId"] = ctx["folder_id"]
+            run_async(_save_conversation_meta(ctx["assistant_id"], conversation_id, meta))
         except Exception:
             logger.exception("[chat] stream: failed to save conversation meta")
 

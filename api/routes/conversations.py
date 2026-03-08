@@ -14,6 +14,9 @@ from api.services.conversation_service import (
     delete_conversation_meta,
     get_thread_id_for_conversation,
     get_or_create_thread,
+    list_folder_conversation_ids,
+    add_thread_mapping,
+    remove_thread_mapping,
 )
 
 conversations_bp = Blueprint("conversations", __name__)
@@ -23,21 +26,43 @@ conversations_bp = Blueprint("conversations", __name__)
 @require_jwt
 def get_conversations():
     assistant_id = get_user_assistant_id(g.user_id)
-    convos = list_conversations(assistant_id)
+    config_assistant_id = get_user_config_assistant_id(g.user_id)
 
     is_archived = request.args.get("isArchived", "false").lower() == "true"
     folder_id = request.args.get("folderId")
     tags = request.args.getlist("tags")
 
-    filtered = []
-    for c in convos:
-        if c.get("isArchived", False) != is_archived:
-            continue
-        if folder_id and folder_id != "none" and c.get("folderId") != folder_id:
-            continue
-        if tags and not any(t in (c.get("tags") or []) for t in tags):
-            continue
-        filtered.append(c)
+    if folder_id and folder_id != "none":
+        # Folder-native listing: enumerate thread_mappings on the folder's BB assistant.
+        folder_bb_assistant_id = run_async(_get_bb_assistant_id_for_folder(config_assistant_id, folder_id))
+        if not folder_bb_assistant_id:
+            return jsonify({"conversations": [], "pageSize": 25, "pages": 1, "pageNumber": "1", "nextCursor": None})
+
+        folder_entries = list_folder_conversation_ids(folder_bb_assistant_id)
+        all_convos = list_conversations(assistant_id)
+        meta_by_id = {c.get("conversationId"): c for c in all_convos}
+
+        convos = []
+        for entry in folder_entries:
+            cid = entry["conversationId"]
+            meta = meta_by_id.get(cid)
+            convos.append(meta if meta else {"conversationId": cid, "title": "New Chat", "endpoint": "", "model": "", "isArchived": False, "tags": [], "createdAt": "", "updatedAt": ""})
+
+        filtered = [c for c in convos if c.get("isArchived", False) == is_archived]
+        if tags:
+            filtered = [c for c in filtered if any(t in (c.get("tags") or []) for t in tags)]
+    else:
+        # Main list: exclude conversations that belong to a folder.
+        all_convos = list_conversations(assistant_id)
+        filtered = []
+        for c in all_convos:
+            if c.get("isArchived", False) != is_archived:
+                continue
+            if c.get("hidden") or c.get("folderId"):
+                continue
+            if tags and not any(t in (c.get("tags") or []) for t in tags):
+                continue
+            filtered.append(c)
 
     page_size = int(request.args.get("pageSize", "25"))
     cursor = request.args.get("cursor")
@@ -309,16 +334,55 @@ def duplicate_conversation():
 @conversations_bp.route("/api/convos/<conversation_id>/folder", methods=["PUT"])
 @require_jwt
 def move_to_folder(conversation_id):
+    """
+    Move a conversation into (or out of) a folder using the create/copy/hide approach:
+      - Into folder: write thread_mapping on folder's BB assistant + mark conv_meta hidden.
+      - Out of folder: remove thread_mapping from folder's BB assistant + unhide conv_meta.
+    No messages are copied; the existing Backboard thread is reused.
+    """
     data = request.get_json() or {}
-    folder_id = data.get("folderId")
+    folder_id = data.get("folderId")  # None / "" means remove from current folder
+
     assistant_id = get_user_assistant_id(g.user_id)
+    config_assistant_id = get_user_config_assistant_id(g.user_id)
+
+    # Resolve existing conversation metadata.
     convos = list_conversations(assistant_id)
-    for c in convos:
-        if c.get("conversationId") == conversation_id:
-            c["folderId"] = folder_id
-            save_conversation_meta(assistant_id, conversation_id, c)
-            return jsonify(_format_convo(c))
-    return jsonify({"error": "Not found"}), 404
+    convo_meta = next((c for c in convos if c.get("conversationId") == conversation_id), None)
+    if not convo_meta:
+        return jsonify({"error": "Not found"}), 404
+
+    current_folder_id = convo_meta.get("folderId", "")
+
+    # Remove from current folder if the conversation was already in one.
+    if current_folder_id:
+        current_bb_id = run_async(_get_bb_assistant_id_for_folder(config_assistant_id, current_folder_id))
+        if current_bb_id:
+            remove_thread_mapping(current_bb_id, conversation_id)
+
+    if folder_id:
+        # Resolve the target folder's BB assistant.
+        folder_bb_assistant_id = run_async(_get_bb_assistant_id_for_folder(config_assistant_id, folder_id))
+        if not folder_bb_assistant_id:
+            return jsonify({"error": "Target folder not found or has no isolated assistant"}), 404
+
+        # Resolve the existing thread_id for this conversation.
+        thread_id = get_thread_id_for_conversation(conversation_id, assistant_id=assistant_id)
+        if not thread_id:
+            return jsonify({"error": "Thread not found for conversation"}), 404
+
+        # Write a thread_mapping on the folder's BB assistant pointing at the existing thread.
+        add_thread_mapping(folder_bb_assistant_id, conversation_id, thread_id)
+
+        # Hide conversation from the main list and record its folder.
+        updated_meta = {**convo_meta, "folderId": folder_id, "hidden": True}
+        save_conversation_meta(assistant_id, conversation_id, updated_meta)
+    else:
+        # Moving out of folder: unhide and clear folderId.
+        updated_meta = {k: v for k, v in convo_meta.items() if k not in ("folderId", "hidden")}
+        save_conversation_meta(assistant_id, conversation_id, updated_meta)
+
+    return jsonify(_format_convo(updated_meta))
 
 
 def _build_message_snapshot(messages: list, conversation_id: str) -> list:
