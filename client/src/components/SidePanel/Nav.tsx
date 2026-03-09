@@ -10,6 +10,7 @@ import type { NavLink, NavProps } from '~/common';
 import { ActivePanelProvider, useActivePanel } from '~/Providers';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
+import EnterpriseUpsellCard from './EnterpriseUpsellCard';
 
 function NavContent({ links, isCollapsed, resize }: Omit<NavProps, 'defaultActive'>) {
   const localize = useLocalize();
@@ -97,6 +98,11 @@ function NavContent({ links, isCollapsed, resize }: Omit<NavProps, 'defaultActiv
                     </Accordion>
                   );
                 })}
+                {!isCollapsed && (
+                  <div className="mt-auto pt-3">
+                    <EnterpriseUpsellCard />
+                  </div>
+                )}
               </div>
             </div>
           </div>

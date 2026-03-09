@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.14.3",
+    "title": "v2.14.3",
+    "publishedAt": "2026-03-09T00:00:00Z",
+    "body": "**Hotfix release — enterprise support CTA in right drawer**\n\n- **Right drawer:** add a new enterprise card anchored at the bottom of the panel for clear workspace upsell visibility.\n- **Copy + CTA:** replace internal placeholder text with customer-facing enterprise setup messaging and a direct `Contact support` action (`mailto:support@backboard.io`).\n- **Dark mode polish:** improve contrast for the Backboard badge and CTA text so the card remains readable in dark theme."
+  },
+  {
     "tagName": "v2.14.2",
     "title": "v2.14.2",
     "publishedAt": "2026-03-08T22:49:14Z",
