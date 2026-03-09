@@ -13,6 +13,7 @@ import {
   useLocalize,
 } from '~/hooks';
 import { useGetConvoIdQuery, useGetStartupConfig, useGetEndpointsQuery } from '~/data-provider';
+import { useGetSubscription } from '~/data-provider/Billing/queries';
 import { getDefaultModelSpec, getModelSpecPreset, logger, isNotFoundError } from '~/utils';
 import { ToolCallsMapProvider } from '~/Providers';
 import ChatView from '~/components/Chat/ChatView';
@@ -52,6 +53,11 @@ export default function ChatRoute() {
       isAuthenticated && conversationId !== Constants.NEW_CONVO && !hasSetConversation.current,
   });
   const endpointsQuery = useGetEndpointsQuery({ enabled: isAuthenticated });
+  const billingEnabled = startupConfig?.billing?.enabled === true;
+  const subscriptionQuery = useGetSubscription({
+    enabled: isAuthenticated && billingEnabled,
+  });
+  const billingReady = !billingEnabled || subscriptionQuery.isFetched;
   const assistantListMap = useAssistantListMap();
 
   const isTemporaryChat = conversation && conversation.expiredAt ? true : false;
@@ -73,7 +79,11 @@ export default function ChatRoute() {
     // Wait for roles to load so hasAgentAccess has a definitive value in useNewConvo
     const rolesLoaded = roles?.USER != null;
     const shouldSetConvo =
-      (startupConfig && rolesLoaded && !hasSetConversation.current && !modelsQuery.data?.initial) ??
+      (startupConfig &&
+        rolesLoaded &&
+        billingReady &&
+        !hasSetConversation.current &&
+        !modelsQuery.data?.initial) ??
       false;
     /* Early exit if startupConfig is not loaded and conversation is already set and only initial models have loaded */
     if (!shouldSetConvo) {
@@ -156,6 +166,7 @@ export default function ChatRoute() {
   }, [
     roles,
     startupConfig,
+    billingReady,
     initialConvoQuery.data,
     initialConvoQuery.isError,
     endpointsQuery.data,
@@ -163,7 +174,11 @@ export default function ChatRoute() {
     assistantListMap,
   ]);
 
-  if (endpointsQuery.isLoading || modelsQuery.isLoading) {
+  if (
+    endpointsQuery.isLoading ||
+    modelsQuery.isLoading ||
+    (billingEnabled && subscriptionQuery.isLoading)
+  ) {
     return (
       <div className="flex h-screen items-center justify-center" aria-live="polite" role="status">
         <Spinner className="text-text-primary" />

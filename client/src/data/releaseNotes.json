@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.14.6",
+    "title": "v2.14.6",
+    "publishedAt": "2026-03-09T00:00:00Z",
+    "body": "**Hotfix release — free-tier model defaulting and gating alignment**\n\n- **Startup model selection:** free users now initialize only to free-tier providers and avoid premium default models on first load/new chat.\n- **Race-condition fix:** conversation bootstrap now waits for billing subscription readiness so free-plan filtering applies deterministically.\n- **Server enforcement:** premium model requests from free plans return a clear upgrade-required error.\n- **Personas in selector:** Personas now display lock state for free users in the model dropdown."
+  },
+  {
     "tagName": "v2.14.5",
     "title": "v2.14.5",
     "publishedAt": "2026-03-09T00:00:00Z",

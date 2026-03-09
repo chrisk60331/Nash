@@ -35,6 +35,7 @@ import {
   logger,
 } from '~/utils';
 import { useDeleteFilesMutation, useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
+import { useGetSubscription } from '~/data-provider/Billing/queries';
 import useAssistantListMap from './Assistants/useAssistantListMap';
 import { useResetChatBadges } from './useChatBadges';
 import { useApplyModelSpecEffects } from './Agents';
@@ -46,6 +47,10 @@ const useNewConvo = (index = 0) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: startupConfig } = useGetStartupConfig();
+  const billingEnabled = startupConfig?.billing?.enabled === true;
+  const freeModels = startupConfig?.billing?.freeModels ?? [];
+  const { data: subscription } = useGetSubscription({ enabled: billingEnabled });
+  const isFreePlan = billingEnabled && subscription?.plan === 'free';
   const applyModelSpecEffects = useApplyModelSpecEffects();
   const clearAllConversations = store.useClearConvoState();
   const defaultPreset = useRecoilValue(store.defaultPreset);
@@ -70,6 +75,37 @@ const useNewConvo = (index = 0) => {
   const { pauseGlobalAudio } = usePauseGlobalAudio(index);
   const saveDrafts = useRecoilValue<boolean>(store.saveDrafts);
   const resetBadges = useResetChatBadges();
+
+  const isModelAllowedForPlan = useCallback(
+    (modelName: string) => {
+      if (!isFreePlan) {
+        return true;
+      }
+
+      const segments = modelName.toLowerCase().split('/');
+      return freeModels.some((p) =>
+        segments.some((seg) => seg === p || seg.startsWith(`${p}-`) || seg.startsWith(p)),
+      );
+    },
+    [freeModels, isFreePlan],
+  );
+
+  const getSelectableModels = useCallback(
+    (modelsConfig: TModelsConfig | undefined, endpoint: EModelEndpoint | undefined): string[] => {
+      if (!endpoint) {
+        return [];
+      }
+
+      const endpointModels = modelsConfig?.[endpoint] ?? [];
+      return endpointModels
+        .filter((model) => {
+          const modelName = getModelName(model);
+          return isModelAllowedForPlan(modelName);
+        })
+        .map(getModelName);
+    },
+    [isModelAllowedForPlan],
+  );
 
   const { mutateAsync } = useDeleteFilesMutation({
     onSuccess: () => {
@@ -154,6 +190,29 @@ const useNewConvo = (index = 0) => {
             }) as EModelEndpoint;
           }
 
+          if (isFreePlan && defaultEndpoint) {
+            const allowedModelsForDefault = getSelectableModels(modelsConfig, defaultEndpoint);
+            if (allowedModelsForDefault.length === 0) {
+              const fallbackEndpoint = Object.keys(endpointsConfig ?? {}).find((ep) => {
+                if (
+                  isAgentsEndpoint(ep as EModelEndpoint) &&
+                  !hasAgentAccess &&
+                  !isExistingAgentConvo
+                ) {
+                  return false;
+                }
+                if (!endpointsConfig?.[ep]) {
+                  return false;
+                }
+                return getSelectableModels(modelsConfig, ep as EModelEndpoint).length > 0;
+              }) as EModelEndpoint | undefined;
+
+              if (fallbackEndpoint) {
+                defaultEndpoint = fallbackEndpoint;
+              }
+            }
+          }
+
           const endpointType = getEndpointField(endpointsConfig, defaultEndpoint, 'type');
           if (!conversation.endpointType && endpointType) {
             conversation.endpointType = endpointType;
@@ -196,7 +255,7 @@ const useNewConvo = (index = 0) => {
             conversation.assistant_id = undefined;
           }
 
-          const models = (modelsConfig?.[defaultEndpoint] ?? []).map(getModelName);
+          const models = getSelectableModels(modelsConfig, defaultEndpoint);
           const defaultParamsEndpoint = getDefaultParamsEndpoint(endpointsConfig, defaultEndpoint);
           conversation = buildDefaultConvo({
             conversation,
@@ -266,6 +325,8 @@ const useNewConvo = (index = 0) => {
       assistantsListMap,
       modelsQuery.data,
       hasAgentAccess,
+      isFreePlan,
+      getSelectableModels,
       setIsSubmitting,
       setShowStopButton,
       setActiveRunId,

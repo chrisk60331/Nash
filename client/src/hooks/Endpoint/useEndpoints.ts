@@ -134,6 +134,7 @@ export const useEndpoints = ({
         result.models = agents?.map((agent) => ({
           name: agent.id,
           isGlobal: agent.isPublic ?? false,
+          isPremium: isFreePlan,
         }));
         result.agentNames = agents?.reduce((acc, agent) => {
           acc[agent.id] = agent.name || '';

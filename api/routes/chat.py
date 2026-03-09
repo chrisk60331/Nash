@@ -19,13 +19,15 @@ from backboard.exceptions import BackboardAPIError, BackboardValidationError
 from api.middleware.jwt_auth import require_jwt
 from api.services.backboard_service import get_client, stream_message_proxy_compatible, run_with_tool_loop
 from api.services.async_runner import run_async, iter_async
-from api.services.user_service import get_user_assistant_id, get_user_config_assistant_id
+from api.services.user_service import get_user_assistant_id, get_user_config_assistant_id, find_user_by_id
 from api.services.conversation_service import (
     get_or_create_thread,
     save_conversation_meta,
     _save_conversation_meta,
 )
 from api.services.token_service import check_token_limit, record_token_usage
+from api.routes.billing import get_user_plan
+from api.routes.config_routes import FREE_TIER_PROVIDERS
 
 chat_bp = Blueprint("chat", __name__)
 logger = logging.getLogger(__name__)
@@ -52,6 +54,27 @@ def _extract_user_text(payload: dict) -> str:
             last = messages[-1] if isinstance(messages, list) else {}
             text = last.get("text", "") or last.get("content", "")
     return text
+
+
+def _extract_requested_model(payload: dict) -> str:
+    model = payload.get("model") or ""
+    endpoint_option = payload.get("endpointOption", {})
+    if not model and endpoint_option:
+        model = endpoint_option.get("model", "") or endpoint_option.get("modelLabel", "")
+    return model
+
+
+def _is_free_tier_model(model_name: str) -> bool:
+    if not model_name:
+        return False
+
+    providers = {p.lower() for p in FREE_TIER_PROVIDERS}
+    segments = model_name.lower().split("/")
+    return any(
+        seg == provider or seg.startswith(f"{provider}-") or seg.startswith(provider)
+        for provider in providers
+        for seg in segments
+    )
 
 
 def _is_tool_use_error(message: str) -> bool:
@@ -469,6 +492,18 @@ def start_chat(endpoint_name=None):
             "conversationId": conversation_id,
             "status": "started",
         })
+
+    user = find_user_by_id(g.user_id)
+    plan = get_user_plan(user)
+    requested_model = _extract_requested_model(payload)
+    if plan == "free" and requested_model and not _is_free_tier_model(requested_model):
+        return (
+            jsonify({
+                "error": "This model requires a paid plan. Select a free model or upgrade in Settings -> Billing.",
+                "code": "premium_model_requires_upgrade",
+            }),
+            403,
+        )
 
     # Store just enough for the SSE endpoint to resolve the stream context.
     _streams[stream_id] = {
