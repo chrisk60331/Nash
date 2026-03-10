@@ -59,6 +59,6 @@ CMD ["uv", "run", "gunicorn", \
      "--timeout", "0", \
      "--workers", "1", \
      "--worker-class", "gevent", \
-     "--worker-connections", "1000", \
+     "--worker-connections", "100", \
      "api.app:create_app()"]
 

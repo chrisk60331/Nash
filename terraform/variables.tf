@@ -97,7 +97,7 @@ variable "health_check_healthy_threshold" {
 variable "health_check_unhealthy_threshold" {
   type        = number
   description = "Number of consecutive failures to mark unhealthy."
-  default     = 5
+  default     = 2
 }
 
 variable "ecr_retain_count" {

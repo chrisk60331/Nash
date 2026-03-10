@@ -91,13 +91,40 @@ SERVICE_ARN="$(aws apprunner list-services --region "${AWS_REGION}" \
 echo "[8/${STEPS}] Starting App Runner deployment..."
 aws apprunner start-deployment --service-arn "${SERVICE_ARN}" --region "${AWS_REGION}"
 
-echo "Deployment started"
-aws apprunner describe-service --service-arn "${SERVICE_ARN}" --region "${AWS_REGION}" | jq -r '.Service.Status'
+# Derive the CloudWatch log group from the service ARN:
+# arn:aws:apprunner:region:account:service/name/service-id
+SERVICE_ID="$(echo "${SERVICE_ARN}" | awk -F'/' '{print $NF}')"
+LOG_GROUP="/aws/apprunner/${SERVICE_NAME}/${SERVICE_ID}/service"
+
+echo "Deployment started — tailing ${LOG_GROUP}"
+aws logs tail "${LOG_GROUP}" \
+  --region "${AWS_REGION}" \
+  --follow \
+  --since 1m \
+  --format short &
+TAIL_PID=$!
+
+LOG_GROUP="/aws/apprunner/${SERVICE_NAME}/${SERVICE_ID}/application"
+
+echo "Deployment started — tailing ${LOG_GROUP}"
+aws logs tail "${LOG_GROUP}" \
+  --region "${AWS_REGION}" \
+  --follow \
+  --since 1m \
+  --format short &
+APP_TAIL_PID=$!
 
 while [ "$(aws apprunner describe-service --service-arn "${SERVICE_ARN}" --region "${AWS_REGION}" | jq -r '.Service.Status')" = "OPERATION_IN_PROGRESS" ]; do
-    echo "Waiting for deployment to complete..."
     sleep 10
 done
 
+
+STATUS="$(aws apprunner describe-service --service-arn "${SERVICE_ARN}" --region "${AWS_REGION}" | jq -r '.Service.Status')"
 echo ""
-echo "Deployment completed"
+echo "Deployment completed — status: ${STATUS}"
+
+cleanup() {
+  kill "${TAIL_PID}" 2>/dev/null || true
+  kill "${APP_TAIL_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT SIGINT SIGTERM 
