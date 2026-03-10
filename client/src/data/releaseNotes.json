@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.14.10",
+    "title": "v2.14.10",
+    "publishedAt": "2026-03-10T00:00:00Z",
+    "body": "**Hotfix release — referral card UX polish**\n\n- **Fixed chopped referral code:** header popover now uses a wider grid column for the Code cell so the full code renders without truncation.\n- **Hover-to-copy code:** Code cell is now a clickable button with a copy icon that appears on hover; checkmark confirms the copy.\n- **Inline copy row:** referral link row shows the URL inline with a sticky Copy button — always visible on mobile, revealed on hover on desktop.\n- **Popover positioning:** referral panel now drops directly below the Invite badge using the headlessui anchor prop, no longer overlapping the config drawer."
+  },
+  {
     "tagName": "v2.14.9",
     "title": "v2.14.9",
     "publishedAt": "2026-03-10T00:00:00Z",

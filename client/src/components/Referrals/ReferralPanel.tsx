@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Copy, Gift, Sparkles, Ticket, Users } from 'lucide-react';
+import { Check, Copy, Gift, Sparkles, Ticket, Users } from 'lucide-react';
 import { Popover, Transition } from '@headlessui/react';
 import { registerPage } from 'librechat-data-provider';
 import { useToastContext } from '@librechat/client';
@@ -38,6 +38,8 @@ export default function ReferralPanel({
   const redeemMutation = useRedeemReferralOrPromoCode();
   const [code, setCode] = useState('');
   const [badgeOpen, setBadgeOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const rewardUsd = data?.rewardUsd ?? startupConfig?.referrals?.rewardUsd ?? 5;
   const registerHref = useMemo(() => {
@@ -47,6 +49,20 @@ export default function ReferralPanel({
     return `${registerPage()}${window.location.search}`;
   }, []);
 
+  const handleCopyCode = async () => {
+    if (!data?.referralCode) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(data.referralCode);
+      showToast({ message: 'Referral code copied', status: 'success' });
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    } catch (error) {
+      showToast({ message: 'Could not copy referral code', status: 'error' });
+    }
+  };
+
   const handleCopy = async () => {
     if (!data?.referralLink) {
       return;
@@ -54,6 +70,8 @@ export default function ReferralPanel({
     try {
       await navigator.clipboard.writeText(data.referralLink);
       showToast({ message: 'Referral link copied', status: 'success' });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       showToast({ message: 'Could not copy referral link', status: 'error' });
     }
@@ -214,7 +232,10 @@ export default function ReferralPanel({
               leaveFrom="opacity-100 translate-y-0 scale-100"
               leaveTo="opacity-0 translate-y-1 scale-95"
             >
-              <Popover.Panel className="fixed right-3 top-16 z-[80] w-[320px] rounded-2xl border border-violet-500/20 bg-background/95 p-4 shadow-2xl backdrop-blur-xl sm:right-4">
+              <Popover.Panel
+                anchor={{ to: 'bottom end', gap: 8 }}
+                className="z-[80] w-[320px] rounded-2xl border border-violet-500/20 bg-background/95 p-4 shadow-2xl backdrop-blur-xl"
+              >
                 <div className="flex items-start gap-3">
                   <div className="rounded-xl bg-violet-500/15 p-2 text-violet-500">
                     <Gift className="h-4 w-4" />
@@ -232,13 +253,24 @@ export default function ReferralPanel({
                   </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  <div className="rounded-xl border border-border-light bg-background/70 p-2">
-                    <div className="text-[10px] uppercase tracking-wide text-text-secondary">Code</div>
-                    <div className="mt-1 truncate text-sm font-semibold tracking-[0.12em] text-text-primary">
+                <div className="mt-3 grid grid-cols-[2fr_1fr_1fr] gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    className="group/code rounded-xl border border-border-light bg-background/70 p-2 text-left transition-colors hover:border-violet-500/40 hover:bg-violet-500/5"
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="text-[10px] uppercase tracking-wide text-text-secondary">Code</div>
+                      {copiedCode ? (
+                        <Check className="h-3 w-3 text-violet-500" />
+                      ) : (
+                        <Copy className="h-3 w-3 text-text-secondary opacity-0 transition-opacity group-hover/code:opacity-100" />
+                      )}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold tracking-widest text-text-primary">
                       {data?.referralCode ?? '...'}
                     </div>
-                  </div>
+                  </button>
                   <div className="rounded-xl border border-border-light bg-background/70 p-2">
                     <div className="text-[10px] uppercase tracking-wide text-text-secondary">Signups</div>
                     <div className="mt-1 text-sm font-semibold text-text-primary">{data?.stats.signups ?? 0}</div>
@@ -251,18 +283,22 @@ export default function ReferralPanel({
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center gap-2">
+                <div className="group mt-3 flex items-center overflow-hidden rounded-xl border border-border-light">
+                  <span className="min-w-0 flex-1 truncate px-3 py-2 text-[11px] text-text-secondary">
+                    {data?.referralLink}
+                  </span>
                   <button
                     type="button"
                     onClick={handleCopy}
-                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-violet-700 active:scale-[0.97]"
+                    className="flex shrink-0 items-center gap-1.5 bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-all duration-200 hover:bg-violet-700 active:scale-[0.97] sm:opacity-0 sm:group-hover:opacity-100"
                   >
-                    <Copy className="h-3.5 w-3.5" />
-                    Copy link
+                    {copied ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                    {copied ? 'Copied' : 'Copy'}
                   </button>
-                  <span className="min-w-0 truncate rounded-xl border border-border-light px-3 py-2 text-[11px] text-text-secondary">
-                    {data?.referralLink}
-                  </span>
                 </div>
               </Popover.Panel>
             </Transition>
@@ -325,21 +361,25 @@ export default function ReferralPanel({
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-violet-700"
-            >
-              <Copy className="h-4 w-4" />
-              Copy invite link
-            </button>
-            {data?.referralLink && (
-              <span className="truncate rounded-2xl border border-border-light px-3 py-2 text-xs text-text-secondary">
+          {data?.referralLink && (
+            <div className="group mt-4 flex items-center overflow-hidden rounded-2xl border border-border-light">
+              <span className="min-w-0 flex-1 truncate px-4 py-2.5 text-xs text-text-secondary">
                 {data.referralLink}
               </span>
-            )}
-          </div>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex shrink-0 items-center gap-2 bg-violet-600 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-violet-700 active:scale-[0.97] sm:opacity-0 sm:group-hover:opacity-100"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          )}
 
           {showRedeem && (
             <div className="mt-4 rounded-2xl border border-border-light bg-background/70 p-3">

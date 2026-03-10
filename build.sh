@@ -72,7 +72,11 @@ if [[ "${SKIP_TERRAFORM:-0}" != "1" ]]; then
 # ── 6. Terraform apply (full) ──────────────────────────────────────────
 echo "[6/${STEPS}] Running terraform apply (env: ${ENV})..."
   terraform -chdir="${TF_DIR}" init -input=false
-  terraform -chdir="${TF_DIR}" apply -auto-approve
+  terraform -chdir="${TF_DIR}" plan
+  read -p "Apply changes? (y/n): " apply
+  if [[ "${apply}" == "y" ]]; then
+    terraform -chdir="${TF_DIR}" apply -auto-approve
+  fi
   echo ""
 fi
 
