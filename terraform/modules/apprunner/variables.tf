@@ -106,6 +106,12 @@ variable "custom_domain" {
   default     = ""
 }
 
+variable "custom_domain_hellonash" {
+  type        = string
+  description = "Additional custom domain to associate with the App Runner service (e.g. hellonash.io). Leave empty to skip."
+  default     = ""
+}
+
 variable "log_retention_days" {
   type        = number
   description = "CloudWatch log retention in days."

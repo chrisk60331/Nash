@@ -123,12 +123,19 @@ resource "aws_apprunner_custom_domain_association" "this" {
   enable_www_subdomain = false
 }
 
+resource "aws_apprunner_custom_domain_association" "hellonash" {
+  count                = var.custom_domain_hellonash != "" ? 1 : 0
+  domain_name          = var.custom_domain_hellonash
+  service_arn          = aws_apprunner_service.this.arn
+  enable_www_subdomain = false
+}
+
 # --- CloudWatch: Log retention ---
 # App Runner creates this log group automatically on first deploy.
 # Terraform adopts it here to enforce the retention policy.
 
 resource "aws_cloudwatch_log_group" "application" {
-  name              = "/aws/apprunner/${local.service_name}/${aws_apprunner_service.this.service_id}/application"
+  name              = "/aws/apprunner/${local.service_name}/${aws_apprunner_service.this.service_id}/logs/application"
   retention_in_days = var.log_retention_days
 
   lifecycle {

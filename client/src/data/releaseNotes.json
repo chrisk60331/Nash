@@ -1,5 +1,11 @@
 [
   {
+    "tagName": "v2.14.9",
+    "title": "v2.14.9",
+    "publishedAt": "2026-03-10T00:00:00Z",
+    "body": "**Hotfix release — Terraform consolidation and hellonash.ai domain**\n\n- **Terraform consolidation:** Remove per-environment sub-directories (`dev/`, `test/`); all environments now share a single root Terraform config and module set, eliminating duplication.\n- **hellonash.ai domain:** Add `custom_domain_hellonash` variable and App Runner custom domain association so `www.hellonash.ai` maps to the same service as `nash.backboard.io`.\n- **Build safety:** `build.sh` now shows a `terraform plan` and prompts for confirmation before running `apply`, preventing accidental auto-applies.\n- **Docker compose:** Add `docker-compose.yml` and `start-docker.sh` for local Docker-based development."
+  },
+  {
     "tagName": "v2.14.8",
     "title": "v2.14.8",
     "publishedAt": "2026-03-09T00:00:00Z",

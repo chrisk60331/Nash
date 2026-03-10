@@ -19,6 +19,7 @@ variable "environment" {
   }
 }
 
+
 variable "container_port" {
   type        = number
   description = "Container port exposed by the service."
@@ -78,13 +79,13 @@ variable "health_check_path" {
 variable "health_check_interval" {
   type        = number
   description = "Health check interval in seconds."
-  default     = 10
+  default     = 20
 }
 
 variable "health_check_timeout" {
   type        = number
   description = "Health check timeout in seconds."
-  default     = 5
+  default     = 19
 }
 
 variable "health_check_healthy_threshold" {
@@ -170,6 +171,11 @@ variable "custom_domain" {
   default     = ""
 }
 
+variable "custom_domain_hellonash" {
+  type        = string
+  description = "Additional custom domain to associate with App Runner (hellonash.io). Leave empty to skip."
+}
+
 # --- Google OAuth ---
 
 variable "google_client_id" {
@@ -235,3 +241,32 @@ variable "alarm_email" {
   description = "Email address for CloudWatch alarm notifications. Leave empty to skip."
   default     = ""
 }
+
+variable "stripe_metered_price_id_plus" {
+  type        = string
+}
+
+
+variable "stripe_metered_price_id_unlimited" {
+  type        = string
+}
+
+variable "stripe_overage_tokens_per_unit" {
+  type        = string
+}
+
+
+variable "referral_bonus_usd" {
+  type        = string
+}
+
+
+variable "token_credits_per_usd" {
+  type        = string
+}
+
+
+variable "stripe_overage_unit_price_usd" {
+  type        = string
+}
+

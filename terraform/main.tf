@@ -41,6 +41,9 @@ locals {
       ALLOW_SHARED_LINKS         = "true"
       STRIPE_PRICE_ID_PLUS       = var.stripe_price_id_plus
       STRIPE_PRICE_ID_UNLIMITED  = var.stripe_price_id_unlimited
+      STRIPE_OVERAGE_TOKENS_PER_UNIT = var.stripe_overage_tokens_per_unit
+      STRIPE_METERED_PRICE_ID_PLUS = var.stripe_metered_price_id_plus
+      STRIPE_METERED_PRICE_ID_UNLIMITED = var.stripe_metered_price_id_unlimited
       PLUS_INCLUDED_TOKENS       = var.plus_included_tokens
       BACKBOARD_AUTH_ASSISTANT_ID = var.backboard_auth_assistant_id
       HELP_AND_FAQ_URL            = "/docs"
@@ -56,7 +59,7 @@ locals {
 module "ecr" {
   source = "./modules/ecr"
 
-  repository_name      = var.app_name
+  repository_name      = "${var.app_name}-${var.environment}"
   environment          = var.environment
   retain_count         = var.ecr_retain_count
   untagged_expire_days = var.ecr_untagged_expire_days
@@ -94,7 +97,8 @@ module "apprunner" {
   environment_variables = local.environment_variables
   ssm_secret_arns       = module.ssm_secrets.arns
 
-  custom_domain      = var.custom_domain
-  log_retention_days = var.log_retention_days
+  custom_domain           = var.custom_domain
+  custom_domain_hellonash = var.custom_domain_hellonash
+  log_retention_days      = var.log_retention_days
   alarm_email        = var.alarm_email
 }
