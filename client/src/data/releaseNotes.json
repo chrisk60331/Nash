@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Dockerfile:** Add gunicorn `--no-control-socket` for compatibility in containerized runs.",
+        "publishedAt": "2026-03-11T05:00:00Z",
+        "tagName": "v2.14.15",
+        "title": "v2.14.15"
+    },
+    {
         "body": "**Hotfix release \u2014 regeneration forks survive reload**\n\n- Persist message branching structure to Backboard so `\u276e\u276f` sibling navigation survives page reloads and server reboots.\n- Fix streaming regeneration responses appearing at the bottom of the conversation before jumping to the correct sibling position.\n- Edit button no longer appears on assistant messages.\n- Fix free-tier users defaulting to the correct model.",
         "publishedAt": "2026-03-11T04:30:00Z",
         "tagName": "v2.14.14",

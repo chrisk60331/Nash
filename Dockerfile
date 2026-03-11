@@ -60,5 +60,6 @@ CMD ["uv", "run", "gunicorn", \
      "--workers", "1", \
      "--worker-class", "gevent", \
      "--worker-connections", "100", \
+     "--no-control-socket", \
      "api.app:create_app()"]
 
