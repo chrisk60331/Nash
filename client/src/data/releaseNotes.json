@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Logo:** Simplified client logo.svg asset.",
+        "publishedAt": "2026-03-12T00:00:00Z",
+        "tagName": "v2.14.21",
+        "title": "v2.14.21"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Logo/icon update:** Logo and logo-dark wired up across README, docs, and client assets.",
         "publishedAt": "2026-03-11T23:00:00Z",
         "tagName": "v2.14.20",
