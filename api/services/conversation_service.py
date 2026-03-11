@@ -210,3 +210,60 @@ def get_conversation_forked_messages(assistant_id: str, conversation_id: str) ->
         if c.get("conversationId") == conversation_id:
             return c.get("forked_messages") or None
     return None
+
+
+REGEN_GRAPH_TYPE = "regen_graph"
+
+
+async def _save_regen_graph(assistant_id: str, conversation_id: str, updates: dict) -> None:
+    """Merge updates into the regen graph memory for this conversation.
+
+    updates maps Backboard message_id -> parent Backboard message_id (or "SKIP").
+    """
+    client = get_client()
+    existing = await client.get_memories(assistant_id)
+    for m in existing.memories:
+        meta = m.metadata or {}
+        if meta.get("type") == REGEN_GRAPH_TYPE and meta.get("conversationId") == conversation_id:
+            try:
+                graph = json.loads(m.content)
+            except json.JSONDecodeError:
+                graph = {}
+            graph.update(updates)
+            await client.update_memory(
+                assistant_id=assistant_id,
+                memory_id=m.id,
+                content=json.dumps(graph),
+                metadata=meta,
+            )
+            return
+    await client.add_memory(
+        assistant_id=assistant_id,
+        content=json.dumps(updates),
+        metadata={
+            "type": REGEN_GRAPH_TYPE,
+            "conversationId": conversation_id,
+        },
+    )
+
+
+def save_regen_graph(assistant_id: str, conversation_id: str, updates: dict) -> None:
+    run_async(_save_regen_graph(assistant_id, conversation_id, updates))
+
+
+async def _get_regen_graph(assistant_id: str, conversation_id: str) -> dict:
+    """Return the regen graph for a conversation (empty dict if none)."""
+    client = get_client()
+    existing = await client.get_memories(assistant_id)
+    for m in existing.memories:
+        meta = m.metadata or {}
+        if meta.get("type") == REGEN_GRAPH_TYPE and meta.get("conversationId") == conversation_id:
+            try:
+                return json.loads(m.content)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+
+def get_regen_graph(assistant_id: str, conversation_id: str) -> dict:
+    return run_async(_get_regen_graph(assistant_id, conversation_id))

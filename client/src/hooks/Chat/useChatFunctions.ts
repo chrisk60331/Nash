@@ -248,7 +248,7 @@ export default function useChatFunctions({
       responseMessageId ?? `${isRegenerate ? messageId : intermediateId}`.replace(/_+$/, '') + '_';
 
     const initialResponse: TMessage = {
-      sender: responseSender,
+      sender: startupConfig?.appTitle ?? 'Nash',
       text: '',
       endpoint: endpoint ?? '',
       parentMessageId: isRegenerate ? messageId : intermediateId,

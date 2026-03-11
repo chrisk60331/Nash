@@ -52,7 +52,8 @@ export default function useContentHandler({ setMessages, getMessages }: TUseCont
         const existingMessage = _messages?.find((m) => m.messageId === messageId);
         response = {
           ...(existingMessage ?? (initialResponse as TMessage)),
-          parentMessageId: userMessage?.messageId ?? '',
+          parentMessageId:
+            existingMessage?.parentMessageId ?? initialResponse.parentMessageId,
           conversationId,
           messageId,
           thread_id,

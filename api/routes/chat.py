@@ -17,13 +17,14 @@ from flask import Blueprint, request, jsonify, g, Response
 from backboard import DocumentStatus
 from backboard.exceptions import BackboardAPIError, BackboardValidationError
 from api.middleware.jwt_auth import require_jwt
-from api.services.backboard_service import get_client, stream_message_proxy_compatible, run_with_tool_loop
+from api.services.backboard_service import get_client, stream_message_proxy_compatible, run_with_tool_loop, get_thread_messages
 from api.services.async_runner import run_async, iter_async
 from api.services.user_service import get_user_assistant_id, get_user_config_assistant_id, find_user_by_id
 from api.services.conversation_service import (
     get_or_create_thread,
     save_conversation_meta,
     _save_conversation_meta,
+    save_regen_graph,
 )
 from api.services.token_service import check_token_limit, record_token_usage
 from api.routes.billing import get_user_plan
@@ -744,6 +745,23 @@ def stream_chat(stream_id):
             title = "New Chat"
         elif len(full_text) > 60:
             title += "..."
+
+        if is_regenerate:
+            try:
+                bb_msgs = run_async(get_thread_messages(thread_id))
+                # Thread ends with: [..., uN, aN, uN_regen, aN_regen]
+                # We want aN_regen to share uN as its parent (same as aN), and uN_regen to be skipped.
+                if len(bb_msgs) >= 4 and bb_msgs[-1].role == "assistant" and bb_msgs[-2].role == "user":
+                    regen_ai_id = bb_msgs[-1].message_id
+                    regen_user_id = bb_msgs[-2].message_id
+                    original_user_id = bb_msgs[-4].message_id
+                    save_regen_graph(ctx["assistant_id"], conversation_id, {
+                        regen_ai_id: original_user_id,
+                        regen_user_id: "SKIP",
+                    })
+                    logger.warning("[chat] regen_graph saved regen_ai=%s -> original_user=%s", regen_ai_id, original_user_id)
+            except Exception:
+                logger.exception("[chat] stream: failed to save regen graph")
 
         try:
             meta = {"title": title, "endpoint": endpoint, "model": model}

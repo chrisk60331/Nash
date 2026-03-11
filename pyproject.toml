@@ -1,6 +1,6 @@
 [project]
 name = "nash-api"
-version = "2.14.13"
+version = "2.14.14"
 description = "Nash 2.0 Python API backend"
 requires-python = ">=3.11"
 dependencies = [

@@ -8,6 +8,7 @@ from api.services.conversation_service import (
     get_thread_id_for_conversation,
     list_conversations,
     get_conversation_forked_messages,
+    get_regen_graph,
 )
 
 messages_bp = Blueprint("messages", __name__)
@@ -97,10 +98,15 @@ def get_messages(conversation_id):
             last_id = msg["messageId"]
         return jsonify(messages)
 
+    regen_graph = get_regen_graph(assistant_id, conversation_id)
+
     messages = []
     for m in bb_messages:
+        bb_id = str(m.message_id)
+        if regen_graph.get(bb_id) == "SKIP":
+            continue
         messages.append({
-            "messageId": str(m.message_id),
+            "messageId": bb_id,
             "conversationId": conversation_id,
             "parentMessageId": "00000000-0000-0000-0000-000000000000",
             "text": m.content or "",
@@ -112,9 +118,17 @@ def get_messages(conversation_id):
             "error": False,
         })
 
+    # Build linear parent chain first
     if len(messages) >= 2:
         for i in range(1, len(messages)):
             messages[i]["parentMessageId"] = messages[i - 1]["messageId"]
+
+    # Apply persisted parent overrides (regenerated AI responses share the original user as parent)
+    if regen_graph:
+        for msg in messages:
+            override = regen_graph.get(msg["messageId"])
+            if override and override != "SKIP":
+                msg["parentMessageId"] = override
 
     return jsonify(messages)
 

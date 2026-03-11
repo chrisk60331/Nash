@@ -618,7 +618,7 @@ endpoints:
           - 'aws-bedrock/mistral.pixtral-large-2502-v1:0'
         fetch: false
       selectorTiers:
-        free:
+        fast:
           - 'aws-bedrock/meta.llama3-1-70b-instruct-v1:0'
           - 'aws-bedrock/meta.llama3-1-8b-instruct-v1:0'
           - 'aws-bedrock/meta.llama3-2-11b-instruct-v1:0'
@@ -628,7 +628,6 @@ endpoints:
           - 'aws-bedrock/meta.llama3-3-70b-instruct-v1:0'
           - 'aws-bedrock/meta.llama4-maverick-17b-instruct-v1:0'
           - 'aws-bedrock/meta.llama4-scout-17b-instruct-v1:0'
-        fast:
           - 'aws-bedrock/anthropic.claude-3-5-haiku-20241022-v1:0'
           - 'aws-bedrock/meta.llama3-1-8b-instruct-v1:0'
         powerful:

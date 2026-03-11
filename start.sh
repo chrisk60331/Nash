@@ -34,8 +34,8 @@ OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn \
   --bind 0.0.0.0:3080 \
   --workers 1 \
   --timeout 0 \
-  --worker-class gthread \
-  --threads 10 \
+  --worker-class gevent \
+  --worker-connections 100 \
   "api.app:create_app()" > /tmp/nash-api.log 2>&1 &
 API_PID=$!
 sleep 2

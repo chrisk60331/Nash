@@ -1,7 +1,15 @@
 services:
   nash:
-    mem_limit: 1024m
-    cpuset: '0'
+    mem_limit: 4096m
+    cpuset: '0,1,2,3'
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4096m
+        reservations:
+          cpus: '4'
+          memory: 4096m
     build:
       context: .
       dockerfile: Dockerfile
@@ -25,7 +33,7 @@ services:
       interval: 20s
       timeout: 19s
       retries: 3
-      start_period: 15s
+      start_period: 1s
 
 volumes:
   uploads:

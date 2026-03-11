@@ -4,10 +4,6 @@ cd "$(dirname "$0")"
 
 echo "=== Nash 2.0 (Docker) ==="
 
-# Kill any existing processes on port 3080
-lsof -ti:3080 2>/dev/null | xargs kill -9 2>/dev/null || true
-sleep 1
-
 # Stop and remove any existing containers
 docker compose down --remove-orphans 2>/dev/null || true
 
