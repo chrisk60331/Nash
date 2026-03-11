@@ -5,7 +5,6 @@ import {
   OGDialogTemplate,
   Button,
   Label,
-  Input,
   Spinner,
   useToastContext,
 } from '@librechat/client';
@@ -40,7 +39,6 @@ export default function MemoryCreateDialog({
         status: 'success',
       });
       onOpenChange(false);
-      setKey('');
       setValue('');
       setTimeout(() => {
         triggerRef?.current?.focus();
@@ -74,7 +72,6 @@ export default function MemoryCreateDialog({
     },
   });
 
-  const [key, setKey] = useState('');
   const [value, setValue] = useState('');
 
   const handleSave = () => {
@@ -82,7 +79,7 @@ export default function MemoryCreateDialog({
       return;
     }
 
-    if (!key.trim() || !value.trim()) {
+    if (!value.trim()) {
       showToast({
         message: localize('com_ui_field_required'),
         status: 'error',
@@ -91,7 +88,7 @@ export default function MemoryCreateDialog({
     }
 
     createMemory({
-      key: key.trim(),
+      key: '',
       value: value.trim(),
     });
   };
@@ -111,20 +108,6 @@ export default function MemoryCreateDialog({
         className="w-11/12 md:max-w-lg"
         main={
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="memory-key" className="text-sm font-medium text-text-primary">
-                {localize('com_ui_key')}
-              </Label>
-              <Input
-                id="memory-key"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                onKeyDown={handleKeyPress}
-                placeholder={localize('com_ui_enter_key')}
-                className="w-full"
-              />
-              <p className="text-xs text-text-secondary">{localize('com_ui_memory_key_hint')}</p>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="memory-value" className="text-sm font-medium text-text-primary">
                 {localize('com_ui_value')}
@@ -146,7 +129,7 @@ export default function MemoryCreateDialog({
             type="button"
             variant="submit"
             onClick={handleSave}
-            disabled={isLoading || !key.trim() || !value.trim()}
+            disabled={isLoading || !value.trim()}
             className="text-white"
             aria-label={localize('com_ui_create_memory')}
           >

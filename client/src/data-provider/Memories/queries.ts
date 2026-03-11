@@ -87,11 +87,24 @@ export const useCreateMemoryMutation = (
       ...options,
       onSuccess: (data, variables, context) => {
         queryClient.setQueryData<MemoriesResponse>([QueryKeys.memories], (oldData) => {
-          if (!oldData || !data.memory) {
+          const memory: TUserMemory | undefined =
+            data.memory ??
+            (data &&
+            typeof data === 'object' &&
+            'key' in data &&
+            'value' in data
+              ? {
+                  key: (data as { key: string }).key,
+                  value: (data as { value: string }).value,
+                  updated_at: (data as { updated_at?: string }).updated_at ?? '',
+                  tokenCount: (data as { tokenCount?: number }).tokenCount,
+                }
+              : undefined);
+          if (!oldData || !memory) {
             return oldData;
           }
 
-          const newMemories = [...oldData.memories, data.memory];
+          const newMemories = [...oldData.memories, memory];
           const totalTokens = newMemories.reduce(
             (sum, memory) => sum + (memory.tokenCount || 0),
             0,

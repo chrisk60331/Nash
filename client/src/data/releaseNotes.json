@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Memory create dialog:** Removed the key field from the manual memory creation form — value-only input simplifies the UX and key is now handled server-side.\n- **Memory create mutation:** Fixed cache update to handle API response shape variation where memory data is returned at the top level rather than nested under `data.memory`.\n- **Backboard model diff script:** New `scripts/diff-backboard-models.py` utility paginates all Backboard providers/models and diffs against `librechat.yaml` to surface missing or stale model entries.",
+        "publishedAt": "2026-03-11T22:00:00Z",
+        "tagName": "v2.14.18",
+        "title": "v2.14.18"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Memory toggle fix:** Memories added via the right drawer are now correctly surfaced in chat. The `Readonly` memory mode sent by the frontend was not matching the backend lookup key (`On`), causing all manually added memories to be silently ignored. Backend now accepts `Readonly` directly.",
         "publishedAt": "2026-03-11T21:00:00Z",
         "tagName": "v2.14.17",
