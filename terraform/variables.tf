@@ -91,7 +91,7 @@ variable "health_check_timeout" {
 variable "health_check_healthy_threshold" {
   type        = number
   description = "Number of consecutive successes to mark healthy."
-  default     = 1
+  default     = 3
 }
 
 variable "health_check_unhealthy_threshold" {

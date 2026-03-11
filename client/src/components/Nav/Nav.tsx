@@ -10,6 +10,7 @@ import {
   startTransition,
 } from 'react';
 import { useRecoilValue } from 'recoil';
+import { matchSorter } from 'match-sorter';
 import { motion } from 'framer-motion';
 import { Skeleton, useMediaQuery } from '@librechat/client';
 import { PermissionTypes, Permissions } from 'librechat-data-provider';
@@ -98,7 +99,6 @@ const Nav = memo(
       useConversationsInfiniteQuery(
         {
           tags: tags.length === 0 ? undefined : tags,
-          search: search.debouncedQuery || undefined,
           folderId: 'none',
         },
         {
@@ -135,6 +135,16 @@ const Nav = memo(
     const conversations = useMemo(() => {
       return data ? data.pages.flatMap((page) => page.conversations) : [];
     }, [data]);
+
+    const filteredConversations = useMemo(() => {
+      if (!search.debouncedQuery) {
+        return conversations;
+      }
+      return matchSorter(conversations, search.debouncedQuery, {
+        keys: ['title'],
+        threshold: matchSorter.rankings.CONTAINS,
+      });
+    }, [conversations, search.debouncedQuery]);
 
     const toggleNavVisible = useCallback(() => {
       // Use startTransition to mark this as a non-urgent update
@@ -179,6 +189,15 @@ const Nav = memo(
       refetch();
     }, [tags, refetch]);
 
+    useEffect(() => {
+      if (!search.debouncedQuery) {
+        return;
+      }
+      if (!isFetchingNextPage && computedHasNextPage) {
+        fetchNextPage();
+      }
+    }, [search.debouncedQuery, isFetchingNextPage, computedHasNextPage, fetchNextPage]);
+
     const loadMoreConversations = useCallback(() => {
       if (isFetchingNextPage || !computedHasNextPage) {
         return;
@@ -214,18 +233,18 @@ const Nav = memo(
     );
 
     const [isSearchLoading, setIsSearchLoading] = useState(
-      !!search.query && (search.isTyping || isLoading || isFetching),
+      !!search.query && (search.isTyping || isLoading || isFetching || isFetchingNextPage),
     );
 
     useEffect(() => {
       if (search.isTyping) {
         setIsSearchLoading(true);
-      } else if (!isLoading && !isFetching) {
+      } else if (!isLoading && !isFetching && !isFetchingNextPage) {
         setIsSearchLoading(false);
-      } else if (!!search.query && (isLoading || isFetching)) {
+      } else if (!!search.query && (isLoading || isFetching || isFetchingNextPage)) {
         setIsSearchLoading(true);
       }
-    }, [search.query, search.isTyping, isLoading, isFetching]);
+    }, [search.query, search.isTyping, isLoading, isFetching, isFetchingNextPage]);
 
     // Always render sidebar to avoid mount/unmount costs
     // Use transform for GPU-accelerated animation (no layout thrashing)
@@ -251,7 +270,7 @@ const Nav = memo(
             <FoldersList toggleNav={itemToggleNav} />
             <div className="flex min-h-0 flex-grow flex-col overflow-hidden">
               <Conversations
-                conversations={conversations}
+                conversations={filteredConversations}
                 moveToTop={moveToTop}
                 toggleNav={itemToggleNav}
                 containerRef={conversationsRef}
@@ -260,6 +279,7 @@ const Nav = memo(
                 isSearchLoading={isSearchLoading}
                 isChatsExpanded={isChatsExpanded}
                 setIsChatsExpanded={setIsChatsExpanded}
+                searchQuery={search.debouncedQuery}
               />
             </div>
           </div>

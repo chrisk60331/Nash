@@ -1,5 +1,7 @@
 services:
   nash:
+    mem_limit: 1024m
+    cpuset: '0'
     build:
       context: .
       dockerfile: Dockerfile

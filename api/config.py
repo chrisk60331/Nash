@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     allow_social_login: bool = True
     allow_social_registration: bool = True
     allow_shared_links: bool = True
+    domain_hellonash: str = "http://www.hellonash.ai"
 
     model_config = {"env_file": os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")}
 

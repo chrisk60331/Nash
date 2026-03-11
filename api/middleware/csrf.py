@@ -57,6 +57,7 @@ def csrf_protect(f):
                 allowed_origins = {
                     settings.domain_client.rstrip("/"),
                     settings.domain_server.rstrip("/"),
+                    settings.domain_hellonash.rstrip("/"),
                     "http://localhost:3090",
                     "http://localhost:3080",
                 }

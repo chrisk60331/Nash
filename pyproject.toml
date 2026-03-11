@@ -1,6 +1,6 @@
 [project]
 name = "nash-api"
-version = "2.14.11"
+version = "2.15.0"
 description = "Nash 2.0 Python API backend"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,6 +19,7 @@ dependencies = [
     "gevent",
     "flask-limiter>=4.1.1",
     "pyotp>=2.9.0",
+    "uvicorn>=0.41.0",
 ]
 
 [dependency-groups]

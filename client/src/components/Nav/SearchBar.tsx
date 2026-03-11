@@ -30,7 +30,8 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
   const clearSearch = useCallback(
     (pathname?: string) => {
       if (pathname?.includes('/search') || pathname === '/c/new') {
-        queryClient.removeQueries([QueryKeys.messages]);
+        queryClient.removeQueries([QueryKeys.allConversations]);
+        queryClient.removeQueries([QueryKeys.archivedConversations]);
         newConvo({ disableFocus: true });
         navigate('/c/new');
       }
@@ -69,7 +70,8 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
       if (!value) {
         return;
       }
-      queryClient.invalidateQueries([QueryKeys.messages]);
+      queryClient.invalidateQueries([QueryKeys.allConversations]);
+      queryClient.invalidateQueries([QueryKeys.archivedConversations]);
     },
     [queryClient],
   );
@@ -93,8 +95,8 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
       isTyping: true,
     }));
     debouncedSetDebouncedQuery(value);
-    if (value.length > 0 && location.pathname !== '/search') {
-      navigate('/search', { replace: true });
+    if (value.length > 0 && location.pathname === '/search') {
+      navigate('/c/new', { replace: true });
     }
   };
 

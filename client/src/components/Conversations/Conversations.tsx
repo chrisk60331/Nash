@@ -1,7 +1,6 @@
 import { useMemo, memo, type FC, useCallback, useRef } from 'react';
 import throttle from 'lodash/throttle';
 import { ChevronDown } from 'lucide-react';
-import { useRecoilValue } from 'recoil';
 import { Spinner, useMediaQuery } from '@librechat/client';
 import { List, AutoSizer, CellMeasurer, CellMeasurerCache } from 'react-virtualized';
 import type { TConversation } from 'librechat-data-provider';
@@ -9,7 +8,6 @@ import { useLocalize, TranslationKeys } from '~/hooks';
 import { useActiveJobs } from '~/data-provider';
 import { groupConversationsByDate, cn } from '~/utils';
 import Convo from './Convo';
-import store from '~/store';
 
 export type CellPosition = {
   columnIndex: number;
@@ -31,6 +29,7 @@ interface ConversationsProps {
   isSearchLoading: boolean;
   isChatsExpanded: boolean;
   setIsChatsExpanded: (expanded: boolean) => void;
+  searchQuery?: string;
 }
 
 interface MeasuredRowProps {
@@ -155,9 +154,9 @@ const Conversations: FC<ConversationsProps> = ({
   isSearchLoading,
   isChatsExpanded,
   setIsChatsExpanded,
+  searchQuery,
 }) => {
   const localize = useLocalize();
-  const search = useRecoilValue(store.search);
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const convoHeight = isSmallScreen ? 44 : 34;
 
@@ -308,12 +307,18 @@ const Conversations: FC<ConversationsProps> = ({
     [flattenedItems.length, throttledLoadMore],
   );
 
+  const showEmptySearch = !!searchQuery && filteredConversations.length === 0;
+
   return (
     <div className="relative flex h-full min-h-0 flex-col pb-2 text-sm text-text-primary">
       {isSearchLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Spinner className="text-text-primary" />
           <span className="ml-2 text-text-primary">{localize('com_ui_loading')}</span>
+        </div>
+      ) : showEmptySearch ? (
+        <div className="flex flex-1 items-center justify-center">
+          <span className="text-text-secondary">{localize('com_ui_nothing_found')}</span>
         </div>
       ) : (
         <div className="flex-1">
