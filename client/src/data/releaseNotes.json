@@ -1,9 +1,9 @@
 [
     {
-        "body": "**Minor release \u2014 search results in left drawer**\n\n- Move chat search to the left sidebar with fuzzy title matching and remove the dedicated /search page.\n- Refresh conversation lists on search input so results stay in sync.\n- Show an empty-state message when no titles match.",
-        "publishedAt": "2026-03-11T01:09:47Z",
-        "tagName": "v2.15.0",
-        "title": "v2.15.0"
+        "body": "**Hotfix release \u2014 search results in left drawer**\n\n- Move chat search to the left sidebar with fuzzy title matching and remove the dedicated /search page.\n- Refresh conversation lists on search input so results stay in sync.\n- Show an empty-state message when no titles match.",
+        "publishedAt": "2026-03-11T02:40:44Z",
+        "tagName": "v2.14.12",
+        "title": "v2.14.12"
     },
     {
         "body": "**Hotfix release \u2014 build/deploy stabilization**\n\n- **Dockerfile:** Reduce gunicorn `--worker-connections` from 1000 to 100 to stabilize resource usage under App Runner.\n- **build.sh:** Live-tail both service and application CloudWatch log groups during deployment; show final deployment status on completion.\n- **Terraform:** Tighten `health_check_unhealthy_threshold` from 5 to 2 so failed deployments are detected and rolled back faster.\n- **docker-compose.yml / start-docker.sh:** Add local Docker compose setup for testing production image locally.",
