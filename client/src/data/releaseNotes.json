@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release — MCP tool loop hang fix**\n\n- **MCP tool loop:** Capped `run_with_tool_loop` at 10 iterations — an infinite `REQUIRES_ACTION` cycle from the Backboard API could hang the process for 20+ minutes.\n- **MCP timeout:** Added a 120-second hard timeout on `run_async` for MCP calls so a stuck loop releases the Flask worker thread within 2 minutes instead of never.\n- **Health check:** `/api/health` now probes the shared async event loop with a 2-second timeout and returns HTTP 503 if it is stuck, enabling App Runner to detect and auto-replace a hung instance.",
+        "publishedAt": "2026-03-12T20:30:00Z",
+        "tagName": "v2.14.24",
+        "title": "v2.14.24"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Memory default:** Backend now defaults memory mode to `Auto` when no preference is sent (e.g. fresh login, cleared storage). Previously defaulted to `Off`, so the UI showed \"Memory Auto\" but Nash behaved as if memory was off.",
         "publishedAt": "2026-03-12T00:30:00Z",
         "tagName": "v2.14.23",

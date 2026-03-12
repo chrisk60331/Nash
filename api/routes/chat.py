@@ -646,7 +646,7 @@ def stream_chat(stream_id):
                     thread_id=thread_id,
                     content=ctx["user_text"],
                     mcp_server_map=mcp_server_map,
-                ))
+                ), timeout=120)
                 full_text = final_answer or ""
                 total_tokens = (len(ctx["user_text"]) + len(full_text)) // 4 + 1
                 # Emit a single streaming chunk so the UI renders progressively

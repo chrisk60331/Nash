@@ -123,6 +123,9 @@ async def stream_message_proxy_compatible(
     )
 
 
+MAX_TOOL_ITERATIONS = 10
+
+
 async def run_with_tool_loop(
     assistant_id: str,  # kept for caller compatibility; not used by SDK directly
     thread_id: str,
@@ -138,7 +141,7 @@ async def run_with_tool_loop(
     client = get_client()
     message_text = content
 
-    while True:
+    for _iteration in range(MAX_TOOL_ITERATIONS):
         response = await client.add_message(
             thread_id=thread_id,
             content=message_text,
@@ -200,6 +203,8 @@ async def run_with_tool_loop(
         if status2 != "REQUIRES_ACTION":
             return final_text
         message_text = ""
+
+    raise RuntimeError(f"run_with_tool_loop exceeded {MAX_TOOL_ITERATIONS} iterations — aborting")
 
 
 def _find_server_for_tool(tool_name: str, mcp_server_map: dict) -> dict | None:

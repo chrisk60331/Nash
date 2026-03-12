@@ -51,6 +51,12 @@ def create_app() -> Flask:
 
     @app.route("/api/health")
     def health():
+        import asyncio
+        from api.services.async_runner import run_async
+        try:
+            run_async(asyncio.sleep(0), timeout=2)
+        except Exception:
+            return jsonify({"status": "degraded", "reason": "event_loop_stuck"}), 503
         return jsonify({"status": "ok"})
 
     @app.errorhandler(429)
