@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **GitHub badge:** Added GitHub repo badge (Backboard-io/Nash) on login screen (top left) and chat header (left of referral badge).",
+        "publishedAt": "2026-03-14T00:00:00Z",
+        "tagName": "v2.14.30",
+        "title": "v2.14.30"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Sidebar logo:** Nash logo in chat-history nav is centered between the drawer collapse button and bookmarks button, and increased in size by 30%.",
         "publishedAt": "2026-03-14T00:00:00Z",
         "tagName": "v2.14.29",

@@ -10,6 +10,7 @@ import { useGetStartupConfig } from '~/data-provider';
 import ExportAndShareMenu from './ExportAndShareMenu';
 import BookmarkMenu from './Menus/BookmarkMenu';
 import ReferralPanel from '~/components/Referrals/ReferralPanel';
+import GitHubBadge from '~/components/ui/GitHubBadge';
 import { TemporaryChat } from './TemporaryChat';
 import AddMultiConvo from './AddMultiConvo';
 import { useHasAccess } from '~/hooks';
@@ -66,6 +67,7 @@ export default function Header() {
               )}
             >
               <ModelSelector startupConfig={startupConfig} />
+              {isSmallScreen && <GitHubBadge />}
               {isSmallScreen && <ReferralPanel variant="header" />}
               {isSmallScreen && <TemporaryChat />}
               {interfaceConfig.presets === true && interfaceConfig.modelSelect && <PresetsMenu />}
@@ -87,6 +89,7 @@ export default function Header() {
             <ExportAndShareMenu
               isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}
             />
+            <GitHubBadge />
             <ReferralPanel variant="header" />
             <TemporaryChat />
           </div>

@@ -6,6 +6,7 @@ import type { TLoginLayoutContext } from '~/common';
 import { getLoginError, persistRedirectToSession } from '~/utils';
 import { ErrorMessage } from '~/components/Auth/ErrorMessage';
 import ReferralPanel from '~/components/Referrals/ReferralPanel';
+import GitHubBadge from '~/components/ui/GitHubBadge';
 import SocialButton from '~/components/Auth/SocialButton';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useLocalize } from '~/hooks';
@@ -101,6 +102,7 @@ function Login() {
 
   return (
     <div className="relative">
+      <GitHubBadge className="fixed left-4 top-4 z-50" />
       <ReferralPanel variant="login" className="fixed right-4 top-4 z-50" />
       {error != null && <ErrorMessage>{localize(getLoginError(error))}</ErrorMessage>}
       {startupConfig?.emailLoginEnabled === true && (
