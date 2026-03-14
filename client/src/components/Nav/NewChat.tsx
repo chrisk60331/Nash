@@ -57,7 +57,7 @@ export default function NewChat({
 
   return (
     <>
-      <div className="flex items-center justify-between px-0.5 py-[2px] md:py-2">
+      <div className="relative flex items-center justify-between px-0.5 py-[2px] md:py-2">
         <TooltipAnchor
           description={localize('com_nav_close_sidebar')}
           render={
@@ -78,6 +78,18 @@ export default function NewChat({
               />
             </Button>
           }
+        />
+        <img
+          src="/assets/nash.png"
+          alt="Nash"
+          className="pointer-events-none absolute h-[31px] object-contain dark:hidden"
+          style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
+        />
+        <img
+          src="/assets/nash_dark.png"
+          alt="Nash"
+          className="pointer-events-none absolute hidden h-[31px] object-contain dark:block"
+          style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
         />
         <div className="flex gap-0.5">
           {headerButtons}

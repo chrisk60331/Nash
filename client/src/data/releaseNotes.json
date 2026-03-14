@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Sidebar logo:** Nash logo in chat-history nav is centered between the drawer collapse button and bookmarks button, and increased in size by 30%.",
+        "publishedAt": "2026-03-14T00:00:00Z",
+        "tagName": "v2.14.29",
+        "title": "v2.14.29"
+    },
+    {
         "body": "**Hotfix release — Workbox precache fix**\n\n- **Service worker navigate fallback:** Removed `index.html` from Workbox `globIgnores` so it is precached. The SW was calling `createHandlerBoundToURL('index.html')` for SPA fallback but that URL was excluded from the precache manifest, causing `non-precached-url` at activation and broken navigation/second message sends.",
         "publishedAt": "2026-03-14T00:00:00Z",
         "tagName": "v2.14.28",
