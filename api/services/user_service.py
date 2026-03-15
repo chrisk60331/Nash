@@ -136,11 +136,25 @@ def _refresh_user_cache() -> None:
             _last_full_load = loaded_at
 
 
-def find_user_by_email(email: str) -> dict | None:
-    entry = _user_cache.get(email)
-    if _is_cache_entry_fresh(entry):
-        return entry[1]
-    _refresh_user_cache()
+def find_user_by_email(email: str, *, force: bool = False) -> dict | None:
+    """Look up a user by email.
+
+    Pass force=True to bypass the TTL and unconditionally reload from
+    Backboard.  Use this before creating a new user record to guarantee
+    the user does not already exist, regardless of cache state.
+    """
+    if not force:
+        entry = _user_cache.get(email)
+        if _is_cache_entry_fresh(entry):
+            return entry[1]
+    with _user_load_lock:
+        users = run_async(_load_users_from_backboard())
+        if users:
+            loaded_at = time.monotonic()
+            for u in users:
+                _cache_user(u, loaded_at=loaded_at)
+            global _last_full_load
+            _last_full_load = loaded_at
     entry = _user_cache.get(email)
     return entry[1] if entry else None
 

@@ -593,6 +593,12 @@ def oauth_google_callback():
     picture = userinfo.get("picture", "")
 
     user = find_user_by_email(email)
+    if user is None:
+        # Cold-start / stale-cache guard: force an unconditional Backboard
+        # reload before concluding this is a new user.  Prevents creating a
+        # duplicate free-tier record for an existing paying subscriber during
+        # a deployment window when the cache hasn't been populated yet.
+        user = find_user_by_email(email, force=True)
     is_new_user = user is None
     if user is None:
         if not settings.allow_social_registration:
