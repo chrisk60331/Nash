@@ -9,6 +9,9 @@ import {
   Users,
   Tag,
   CheckCircle2,
+  Check,
+  UserX,
+  EyeOff,
 } from 'lucide-react';
 import { Dialog, DialogPanel, Transition, TransitionChild } from '@headlessui/react';
 import { QueryKeys, dataService } from 'librechat-data-provider';
@@ -56,18 +59,29 @@ function avatarGradient(str: string): string {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
 }
 
-function UserAvatar({ name, email, size = 'md' }: { name?: string | null; email: string; size?: 'sm' | 'md' | 'lg' }) {
+function UserAvatar({
+  name,
+  email,
+  size = 'md',
+  disabled,
+}: {
+  name?: string | null;
+  email: string;
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+}) {
   const label = name || email;
   const initial = label[0]?.toUpperCase() ?? '?';
   const gradient = avatarGradient(email);
   return (
     <div
       className={cn(
-        'flex flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold text-white shadow-sm',
+        'flex flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold text-white shadow-sm transition-all duration-200',
         gradient,
         size === 'sm' && 'h-7 w-7 text-xs',
         size === 'md' && 'h-9 w-9 text-sm',
         size === 'lg' && 'h-11 w-11 text-base',
+        disabled && 'opacity-40 grayscale',
       )}
     >
       {initial}
@@ -117,42 +131,92 @@ function DetailRow({
   );
 }
 
+/* ─── Animated checkbox ─── */
+function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
+      aria-checked={checked}
+      aria-label="Select user"
+      className={cn(
+        'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-all duration-150 active:scale-90',
+        checked
+          ? 'border-blue-500 bg-blue-500 shadow-sm shadow-blue-200 dark:shadow-blue-900/40'
+          : 'border-border-medium bg-transparent hover:border-blue-400',
+      )}
+    >
+      {checked && (
+        <Check
+          className="h-2.5 w-2.5 text-white animate-in zoom-in-75 duration-100"
+          strokeWidth={3}
+        />
+      )}
+    </button>
+  );
+}
+
 /* ─── Left panel: user list item ─── */
 function UserListItem({
   user,
   isSelected,
+  isChecked,
   onSelect,
+  onCheck,
 }: {
   user: AdminUser;
   isSelected: boolean;
+  isChecked: boolean;
   onSelect: () => void;
+  onCheck: () => void;
 }) {
+  const isDisabled = user.active === false;
   return (
-    <button
-      onClick={onSelect}
+    <div
       className={cn(
-        'group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-150',
+        'group flex w-full items-center transition-all duration-150',
         isSelected ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-surface-hover',
+        isDisabled && 'opacity-50',
       )}
     >
-      <UserAvatar name={user.name} email={user.email} size="sm" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span
-            className={cn(
-              'truncate text-[13px] font-medium',
-              isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary',
-            )}
-          >
-            {user.name || user.username || user.email}
-          </span>
-          {user.role === 'ADMIN' && (
-            <Shield className="h-3 w-3 flex-shrink-0 text-blue-500" />
-          )}
-        </div>
-        <p className="truncate text-[11px] text-text-secondary">{user.email}</p>
+      {/* Checkbox */}
+      <div className="flex items-center pl-3 pr-1.5 py-2.5">
+        <Checkbox checked={isChecked} onChange={onCheck} />
       </div>
-    </button>
+
+      {/* Card body */}
+      <button
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-2.5 pr-3 text-left"
+      >
+        <UserAvatar name={user.name} email={user.email} size="sm" disabled={isDisabled} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                'truncate text-[13px] font-medium transition-colors duration-100',
+                isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary',
+              )}
+            >
+              {user.name || user.username || user.email}
+            </span>
+            {user.role === 'ADMIN' && (
+              <Shield className="h-3 w-3 flex-shrink-0 text-blue-500" />
+            )}
+            {isDisabled && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                <EyeOff className="h-2 w-2" />
+                disabled
+              </span>
+            )}
+          </div>
+          <p className="truncate text-[11px] text-text-secondary">{user.email}</p>
+        </div>
+      </button>
+    </div>
   );
 }
 
@@ -261,7 +325,7 @@ function SubscriptionDetail({
       <div className="border-b border-border-light px-6 py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <UserAvatar name={user.name} email={user.email} size="lg" />
+            <UserAvatar name={user.name} email={user.email} size="lg" disabled={user.active === false} />
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-semibold text-text-primary">
@@ -278,6 +342,12 @@ function SubscriptionDetail({
                   <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                     <Shield className="h-2.5 w-2.5" />
                     Admin
+                  </span>
+                )}
+                {user.active === false && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                    <EyeOff className="h-2.5 w-2.5" />
+                    Disabled
                   </span>
                 )}
               </div>
@@ -547,8 +617,11 @@ function PromoPanel({ open }: { open: boolean }) {
 /* ─── Main modal ─── */
 export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
   const [search, setSearch] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [detailUserId, setDetailUserId] = useState<string | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>('users');
+  const [disableSuccess, setDisableSuccess] = useState(false);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery(
@@ -576,15 +649,52 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
     {
       onSuccess: (updated) => {
         queryClient.setQueryData(['admin-security-settings'], updated);
-        queryClient.setQueryData([QueryKeys.startupConfig], (current: Record<string, unknown> | undefined) =>
-          current != null ? { ...current, requireMfaForAllUsers: updated.requireMfaForAllUsers } : current,
+        queryClient.setQueryData(
+          [QueryKeys.startupConfig],
+          (current: Record<string, unknown> | undefined) =>
+            current != null
+              ? { ...current, requireMfaForAllUsers: updated.requireMfaForAllUsers }
+              : current,
         );
       },
     },
   );
 
-  const users = data?.users ?? [];
-  const selectedUser = users.find((u) => u.id === selectedUserId) ?? null;
+  const disableMutation = useMutation(
+    (userIds: string[]) => dataService.disableAdminUsers(userIds),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries([QueryKeys.adminUsers]);
+        setSelectedUserIds(new Set());
+        setDisableSuccess(true);
+        setTimeout(() => setDisableSuccess(false), 2500);
+      },
+    },
+  );
+
+  const allUsers = data?.users ?? [];
+  const filteredUsers = showActiveOnly ? allUsers.filter((u) => u.active !== false) : allUsers;
+  const detailUser = allUsers.find((u) => u.id === detailUserId) ?? null;
+
+  const toggleSelection = useCallback((userId: string) => {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleDisable = useCallback(() => {
+    const ids = Array.from(selectedUserIds);
+    if (ids.length === 0) return;
+    disableMutation.mutate(ids);
+  }, [selectedUserIds, disableMutation]);
+
+  const selectionCount = selectedUserIds.size;
 
   return (
     <Transition appear show={open}>
@@ -634,11 +744,11 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                   {/* Tabs */}
                   <div className="flex rounded-lg bg-surface-secondary p-0.5">
                     {(
-                    [
-                      { id: 'users' as ActiveTab, label: 'Users', Icon: Users, count: data?.total },
-                      { id: 'promos' as ActiveTab, label: 'Promos', Icon: Gift, count: undefined },
-                    ] as { id: ActiveTab; label: string; Icon: React.ElementType; count?: number }[]
-                  ).map(({ id, label, Icon, count }) => (
+                      [
+                        { id: 'users' as ActiveTab, label: 'Users', Icon: Users, count: filteredUsers.length },
+                        { id: 'promos' as ActiveTab, label: 'Promos', Icon: Gift, count: undefined },
+                      ] as { id: ActiveTab; label: string; Icon: React.ElementType; count?: number }[]
+                    ).map(({ id, label, Icon, count }) => (
                       <button
                         key={id}
                         onClick={() => setActiveTab(id)}
@@ -701,9 +811,10 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                   </div>
                 </div>
 
-                {/* Search (users tab only) */}
+                {/* Search + filters (users tab only) */}
                 {activeTab === 'users' && (
-                  <div className="border-b border-border-light px-3 py-2">
+                  <div className="border-b border-border-light px-3 py-2 space-y-2">
+                    {/* Search */}
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-secondary" />
                       <input
@@ -714,13 +825,68 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                         className="w-full rounded-lg border border-border-light bg-surface-secondary/50 py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder-text-secondary transition-all focus:border-blue-500 focus:bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
+
+                    {/* Active users filter */}
+                    <button
+                      type="button"
+                      onClick={() => setShowActiveOnly((v) => !v)}
+                      className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-xs text-text-secondary transition-colors hover:text-text-primary"
+                    >
+                      <div
+                        className={cn(
+                          'flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-all duration-150',
+                          showActiveOnly
+                            ? 'border-blue-500 bg-blue-500'
+                            : 'border-border-medium bg-transparent',
+                        )}
+                      >
+                        {showActiveOnly && (
+                          <Check className="h-2 w-2 text-white animate-in zoom-in-75 duration-100" strokeWidth={3} />
+                        )}
+                      </div>
+                      <span>Active users only</span>
+                    </button>
+
+                    {/* Disable action button — slides in when users are selected */}
+                    {selectionCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleDisable}
+                        disabled={disableMutation.isLoading}
+                        className={cn(
+                          'flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-all duration-150 active:scale-[0.97]',
+                          'animate-in slide-in-from-top-1 fade-in duration-200',
+                          disableSuccess
+                            ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
+                            : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50',
+                          disableMutation.isLoading && 'cursor-not-allowed opacity-60',
+                        )}
+                      >
+                        {disableSuccess ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 animate-in zoom-in-75 duration-200" />
+                            Disabled successfully
+                          </>
+                        ) : disableMutation.isLoading ? (
+                          <>
+                            <span className="h-3 w-3 animate-spin rounded-full border border-red-400 border-t-transparent" />
+                            Disabling…
+                          </>
+                        ) : (
+                          <>
+                            <UserX className="h-3.5 w-3.5" />
+                            Disable {selectionCount} user{selectionCount > 1 ? 's' : ''}
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 )}
 
                 {/* List body */}
                 <div className="flex-1 overflow-y-auto">
                   {activeTab === 'users' ? (
-                    isLoading && users.length === 0 ? (
+                    isLoading && allUsers.length === 0 ? (
                       <div className="space-y-px p-2">
                         {[...Array(6)].map((_, i) => (
                           <div
@@ -736,21 +902,32 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                           </div>
                         ))}
                       </div>
-                    ) : users.length === 0 ? (
+                    ) : filteredUsers.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-center">
                         <User className="mb-2 h-8 w-8 text-text-secondary/30" />
                         <p className="text-sm text-text-secondary">
-                          {search ? 'No users found' : 'No users yet'}
+                          {search ? 'No users found' : showActiveOnly ? 'No active users' : 'No users yet'}
                         </p>
+                        {showActiveOnly && allUsers.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowActiveOnly(false)}
+                            className="mt-2 text-xs text-blue-500 hover:underline"
+                          >
+                            Show all users
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="py-1">
-                        {users.map((user) => (
+                        {filteredUsers.map((user) => (
                           <UserListItem
                             key={user.id}
                             user={user}
-                            isSelected={selectedUserId === user.id}
-                            onSelect={() => setSelectedUserId(user.id)}
+                            isSelected={detailUserId === user.id}
+                            isChecked={selectedUserIds.has(user.id)}
+                            onSelect={() => setDetailUserId(user.id)}
+                            onCheck={() => toggleSelection(user.id)}
                           />
                         ))}
                       </div>
@@ -771,10 +948,10 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                     </div>
                     <PromoPanel open={open} />
                   </>
-                ) : selectedUser ? (
+                ) : detailUser ? (
                   <SubscriptionDetail
-                    key={selectedUser.id}
-                    user={selectedUser}
+                    key={detailUser.id}
+                    user={detailUser}
                     onRoleUpdated={() => {
                       /* role label refreshes via query invalidation */
                     }}

@@ -699,6 +699,7 @@ def _format_admin_user(u: dict) -> dict:
         "twoFactorEnabled": u.get("twoFactorEnabled", False),
         "provider": u.get("provider", ""),
         "createdAt": u.get("createdAt", ""),
+        "active": u.get("active", True),
     }
 
 
@@ -825,6 +826,30 @@ def admin_set_role():
 
     update_user_field(target, "role", new_role)
     return jsonify({"userId": target_user_id, "role": new_role})
+
+
+@misc_bp.route("/api/admin/users/disable", methods=["PATCH"])
+@require_jwt
+def admin_disable_users():
+    caller = find_user_by_id(g.user_id)
+    if not caller or caller.get("role", "").upper() != "ADMIN":
+        return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json() or {}
+    user_ids = data.get("userIds", [])
+    if not user_ids:
+        return jsonify({"error": "userIds required"}), 400
+
+    disabled = []
+    for uid in user_ids:
+        if uid == g.user_id:
+            continue
+        target = find_user_by_id(uid)
+        if target:
+            update_user_field(target, "active", False)
+            disabled.append(uid)
+
+    return jsonify({"disabled": disabled})
 
 
 @misc_bp.route("/api/admin/security", methods=["GET"])

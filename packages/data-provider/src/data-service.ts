@@ -1219,6 +1219,7 @@ export interface AdminUser {
   twoFactorEnabled?: boolean;
   provider: string;
   createdAt: string | null;
+  active?: boolean;
 }
 
 export interface AdminUsersResponse {
@@ -1271,6 +1272,10 @@ export const setAdminUserRole = (
   role: string,
 ): Promise<SetRoleResponse> => {
   return request.patch(endpoints.adminSetRole(), { userId, role });
+};
+
+export const disableAdminUsers = (userIds: string[]): Promise<{ disabled: string[] }> => {
+  return request.patch(endpoints.adminDisableUsers(), { userIds });
 };
 
 export const getAdminSecuritySettings = (): Promise<AdminSecuritySettingsResponse> => {

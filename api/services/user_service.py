@@ -59,6 +59,7 @@ def _normalize_user(raw: dict) -> dict:
         "referredAt": raw.get("referredAt", ""),
         "referralRewardGrantedAt": raw.get("referralRewardGrantedAt", ""),
         "termsAcceptedAt": raw.get("termsAcceptedAt", ""),
+        "active": raw.get("active", True),
         "twoFactorEnabled": raw.get("twoFactorEnabled", False),
         "totpSecret": raw.get("totpSecret", ""),
         "backupCodes": raw.get("backupCodes", []),

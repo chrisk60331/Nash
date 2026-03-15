@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **User management:** Users tab count updates with \"Active users only\" filter; disabled users persist correctly (active field preserved in user normalization).\n- **Console:** Suppress React \"Cannot update a component ... RouterProvider\" warning in development.",
+        "publishedAt": "2026-03-14T00:00:00Z",
+        "tagName": "v2.14.32",
+        "title": "v2.14.32"
+    },
+    {
         "body": "**Hotfix release**\n\n- **OAuth cold-start guard:** If `find_user_by_email` returns None during Google OAuth callback, we now force one unconditional Backboard reload before creating a new user. Prevents creating a duplicate free-tier record for an existing paying subscriber when the instance cache is cold (e.g. during deployment).",
         "publishedAt": "2026-03-14T00:00:00Z",
         "tagName": "v2.14.31",

@@ -1,6 +1,16 @@
 import 'regenerator-runtime/runtime';
 import { createRoot } from 'react-dom/client';
 import './locales/i18n';
+
+if (process.env.NODE_ENV === 'development') {
+  const originalError = console.error.bind(console);
+  console.error = (...args) => {
+    if (typeof args[0] === 'string' && args[0].includes('Cannot update a component') && args[0].includes('RouterProvider')) {
+      return;
+    }
+    originalError(...args);
+  };
+}
 import App from './App';
 import './style.css';
 import './mobile.css';
