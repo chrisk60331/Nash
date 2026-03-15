@@ -8,7 +8,7 @@ from api.config import settings
 from api.monetization_models import BalanceRecord, LedgerEntry
 from api.services.async_runner import run_async
 from api.services.backboard_service import get_client
-from api.services.user_service import get_user_config_assistant_id
+from api.services.user_service import get_user_config_assistant_id_async
 
 BALANCE_META_TYPE = "nash_balance"
 LEDGER_META_TYPE = "nash_balance_ledger"
@@ -60,7 +60,7 @@ def _extract_balance_bundle_from_memories(
 async def _load_balance_bundle(
     user_id: str,
 ) -> tuple[tuple[BalanceRecord, str] | None, list[tuple[LedgerEntry, str]]]:
-    assistant_id = get_user_config_assistant_id(user_id)
+    assistant_id = await get_user_config_assistant_id_async(user_id)
     client = get_client()
     response = await client.get_memories(assistant_id)
 
@@ -96,7 +96,7 @@ async def _load_balance_bundle(
 
 
 async def _persist_balance(user_id: str, record: BalanceRecord, memory_id: str | None = None) -> BalanceRecord:
-    assistant_id = get_user_config_assistant_id(user_id)
+    assistant_id = await get_user_config_assistant_id_async(user_id)
     client = get_client()
     payload = record.model_dump(mode="json")
     metadata = {"type": BALANCE_META_TYPE, "user": user_id}
@@ -188,7 +188,7 @@ def award_token_credits(
     )
 
     async def _create_entry() -> None:
-        assistant_id = get_user_config_assistant_id(user_id)
+        assistant_id = await get_user_config_assistant_id_async(user_id)
         client = get_client()
         await client.add_memory(
             assistant_id=assistant_id,

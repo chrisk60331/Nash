@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   Check,
   UserX,
+  UserCheck,
   EyeOff,
+  RefreshCw,
 } from 'lucide-react';
 import { Dialog, DialogPanel, Transition, TransitionChild } from '@headlessui/react';
 import { QueryKeys, dataService } from 'librechat-data-provider';
@@ -621,10 +623,10 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>('users');
-  const [disableSuccess, setDisableSuccess] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState<'disabled' | 'enabled' | null>(null);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery(
+  const { data, isLoading, refetch: refetchUsers, isFetching: isFetchingUsers } = useQuery(
     [QueryKeys.adminUsers, search],
     () => dataService.getAdminUsers(search || undefined),
     {
@@ -666,8 +668,20 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
       onSuccess: () => {
         queryClient.invalidateQueries([QueryKeys.adminUsers]);
         setSelectedUserIds(new Set());
-        setDisableSuccess(true);
-        setTimeout(() => setDisableSuccess(false), 2500);
+        setActionSuccess('disabled');
+        setTimeout(() => setActionSuccess(null), 2500);
+      },
+    },
+  );
+
+  const enableMutation = useMutation(
+    (userIds: string[]) => dataService.enableAdminUsers(userIds),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries([QueryKeys.adminUsers]);
+        setSelectedUserIds(new Set());
+        setActionSuccess('enabled');
+        setTimeout(() => setActionSuccess(null), 2500);
       },
     },
   );
@@ -688,13 +702,28 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
     });
   }, []);
 
-  const handleDisable = useCallback(() => {
+  const selectionCount = selectedUserIds.size;
+
+  // Infer intent: if ALL selected users are disabled → enable action, otherwise disable
+  const allSelectedDisabled =
+    selectionCount > 0 &&
+    Array.from(selectedUserIds).every((id) => {
+      const u = allUsers.find((u) => u.id === id);
+      return u?.active === false;
+    });
+
+  const isEnableMode = allSelectedDisabled;
+  const isBusy = disableMutation.isLoading || enableMutation.isLoading;
+
+  const handleAction = useCallback(() => {
     const ids = Array.from(selectedUserIds);
     if (ids.length === 0) return;
-    disableMutation.mutate(ids);
-  }, [selectedUserIds, disableMutation]);
-
-  const selectionCount = selectedUserIds.size;
+    if (isEnableMode) {
+      enableMutation.mutate(ids);
+    } else {
+      disableMutation.mutate(ids);
+    }
+  }, [selectedUserIds, isEnableMode, enableMutation, disableMutation]);
 
   return (
     <Transition appear show={open}>
@@ -814,16 +843,33 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                 {/* Search + filters (users tab only) */}
                 {activeTab === 'users' && (
                   <div className="border-b border-border-light px-3 py-2 space-y-2">
-                    {/* Search */}
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-secondary" />
-                      <input
-                        type="text"
-                        placeholder="Search users..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full rounded-lg border border-border-light bg-surface-secondary/50 py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder-text-secondary transition-all focus:border-blue-500 focus:bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      />
+                    {/* Search + refresh */}
+                    <div className="flex gap-1.5">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-secondary" />
+                        <input
+                          type="text"
+                          placeholder="Search users..."
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          className="w-full rounded-lg border border-border-light bg-surface-secondary/50 py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder-text-secondary transition-all focus:border-blue-500 focus:bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          queryClient.invalidateQueries([QueryKeys.adminUsers]);
+                          refetchUsers();
+                        }}
+                        disabled={isFetchingUsers}
+                        className="flex-shrink-0 rounded-lg border border-border-light bg-surface-secondary/50 p-1.5 text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:opacity-50"
+                        aria-label="Refresh user list"
+                        title="Refresh user list"
+                      >
+                        <RefreshCw
+                          className={cn('h-3.5 w-3.5', isFetchingUsers && 'animate-spin')}
+                        />
+                      </button>
                     </div>
 
                     {/* Active users filter */}
@@ -847,30 +893,40 @@ export default function AdminUsersModal({ open, onOpenChange }: TDialogProps) {
                       <span>Active users only</span>
                     </button>
 
-                    {/* Disable action button — slides in when users are selected */}
+                    {/* Enable / Disable action button — slides in when users are selected */}
                     {selectionCount > 0 && (
                       <button
                         type="button"
-                        onClick={handleDisable}
-                        disabled={disableMutation.isLoading}
+                        onClick={handleAction}
+                        disabled={isBusy}
                         className={cn(
                           'flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-all duration-150 active:scale-[0.97]',
                           'animate-in slide-in-from-top-1 fade-in duration-200',
-                          disableSuccess
+                          isBusy && 'cursor-not-allowed opacity-60',
+                          actionSuccess
                             ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
-                            : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50',
-                          disableMutation.isLoading && 'cursor-not-allowed opacity-60',
+                            : isEnableMode
+                              ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50'
+                              : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50',
                         )}
                       >
-                        {disableSuccess ? (
+                        {actionSuccess ? (
                           <>
                             <CheckCircle2 className="h-3.5 w-3.5 animate-in zoom-in-75 duration-200" />
-                            Disabled successfully
+                            {actionSuccess === 'enabled' ? 'Enabled successfully' : 'Disabled successfully'}
                           </>
-                        ) : disableMutation.isLoading ? (
+                        ) : isBusy ? (
                           <>
-                            <span className="h-3 w-3 animate-spin rounded-full border border-red-400 border-t-transparent" />
-                            Disabling…
+                            <span className={cn(
+                              'h-3 w-3 animate-spin rounded-full border border-t-transparent',
+                              isEnableMode ? 'border-emerald-400' : 'border-red-400',
+                            )} />
+                            {isEnableMode ? 'Enabling…' : 'Disabling…'}
+                          </>
+                        ) : isEnableMode ? (
+                          <>
+                            <UserCheck className="h-3.5 w-3.5" />
+                            Enable {selectionCount} user{selectionCount > 1 ? 's' : ''}
                           </>
                         ) : (
                           <>

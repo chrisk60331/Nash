@@ -27,12 +27,12 @@ for i in {1..20}; do
   fi
   sleep 2
 done
+trap "docker compose down --volumes --remove-orphans" EXIT SIGINT SIGTERM 
 
 echo ""
 echo "============================================"
 echo "  Nash 2.0 running!"
 echo "  Open: http://localhost:3080"
 echo ""
-echo "  Logs:  docker compose logs -f"
-echo "  Stop:  docker compose down"
 echo "============================================"
+docker compose logs -f

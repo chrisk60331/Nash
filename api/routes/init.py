@@ -104,7 +104,12 @@ def init():
         if cached and (now - cached[0]) < INIT_CACHE_TTL_SEC:
             return jsonify(cached[1])
 
-    config_assistant_id = get_user_config_assistant_id(g.user_id)
+    try:
+        config_assistant_id = get_user_config_assistant_id(g.user_id)
+    except ValueError:
+        resp = jsonify({"error": "user_not_found"})
+        resp.headers["Retry-After"] = "5"
+        return resp, 503
 
     try:
         response = run_async(

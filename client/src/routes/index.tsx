@@ -181,5 +181,5 @@ export const router = createBrowserRouter(
       ],
     },
   ],
-  { basename: baseHref },
+  { basename: baseHref, future: { v7_startTransition: true } },
 );

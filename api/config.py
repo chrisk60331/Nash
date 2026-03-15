@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     domain_hellonash: str = "http://www.hellonash.ai"
 
     model_config = {"env_file": os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")}
-
+    refresh_token: str = ""
+    gmail_app_password: str = ""
+    gmail_user: str = ""
+    alert_recipient_email: str = ""
 
 settings = Settings()

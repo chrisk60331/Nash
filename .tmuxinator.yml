@@ -1,0 +1,15 @@
+name: 0
+root: ~/PycharmProjects/nash2.0
+
+windows:
+  - dashboard:
+      layout: "9063,273x60,0,0{155x60,0,0[155x27,0,0,155x32,0,28],117x60,156,0[117x27,156,0,117x32,156,28]}"
+      panes:
+        - top-left:    # log tail
+            - ./scripts/tail-aws-logs.sh
+        - bottom-left: # watchdog
+            - watch -n 60 bash scripts/recent-user-stats.sh
+        - top-right:   # recent user stats
+            - BASE_URL=https://nash.backboard.io ./scripts/nash-watchdog.sh
+        - bottom-right: # health summary
+            - watch -n 60 SIGNUP_DAYS=100 scripts/nash-health-summary.sh dev

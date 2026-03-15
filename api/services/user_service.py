@@ -171,6 +171,35 @@ def find_user_by_id(user_id: str) -> dict | None:
     return None
 
 
+async def _refresh_user_cache_async() -> None:
+    """Async cache refresh path that never bridges back through run_async.
+
+    This is intentionally separate from _refresh_user_cache() so async callers
+    on the shared event-loop thread avoid self-deadlock.
+    """
+    global _last_full_load
+    now = time.monotonic()
+    if (now - _last_full_load) < _USER_CACHE_TTL_SEC:
+        return
+    users = await _load_users_from_backboard()
+    if users:
+        loaded_at = time.monotonic()
+        for u in users:
+            _cache_user(u, loaded_at=loaded_at)
+        _last_full_load = loaded_at
+
+
+async def find_user_by_id_async(user_id: str) -> dict | None:
+    for entry in _user_cache.values():
+        if _is_cache_entry_fresh(entry) and entry[1].get("id") == user_id:
+            return entry[1]
+    await _refresh_user_cache_async()
+    for entry in _user_cache.values():
+        if entry[1].get("id") == user_id:
+            return entry[1]
+    return None
+
+
 def update_user_field(user: dict, field: str, value) -> None:
     """Update a single field on the user's Backboard memory record."""
     memory_id = user.get("_memory_id")
@@ -291,9 +320,34 @@ def get_user_assistant_id(user_id: str) -> str:
     return assistant_id
 
 
+async def get_user_assistant_id_async(user_id: str) -> str:
+    """Async-safe variant used inside async service codepaths."""
+    user = await find_user_by_id_async(user_id)
+    if not user:
+        raise ValueError(f"User {user_id} not found")
+    assistant_id = user.get("bbAssistantId", "")
+    if not assistant_id:
+        raise ValueError(f"User {user_id} has no bbAssistantId — re-login required")
+    return assistant_id
+
+
 def get_user_config_assistant_id(user_id: str) -> str:
     """Get the bbConfigAssistantId for a user, falling back to bbAssistantId for legacy users."""
     user = find_user_by_id(user_id)
+    if not user:
+        raise ValueError(f"User {user_id} not found")
+    config_id = user.get("bbConfigAssistantId", "")
+    if config_id:
+        return config_id
+    assistant_id = user.get("bbAssistantId", "")
+    if not assistant_id:
+        raise ValueError(f"User {user_id} has no bbAssistantId — re-login required")
+    return assistant_id
+
+
+async def get_user_config_assistant_id_async(user_id: str) -> str:
+    """Async-safe variant used inside async service codepaths."""
+    user = await find_user_by_id_async(user_id)
     if not user:
         raise ValueError(f"User {user_id} not found")
     config_id = user.get("bbConfigAssistantId", "")

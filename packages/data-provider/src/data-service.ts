@@ -1278,6 +1278,10 @@ export const disableAdminUsers = (userIds: string[]): Promise<{ disabled: string
   return request.patch(endpoints.adminDisableUsers(), { userIds });
 };
 
+export const enableAdminUsers = (userIds: string[]): Promise<{ enabled: string[] }> => {
+  return request.patch(endpoints.adminEnableUsers(), { userIds });
+};
+
 export const getAdminSecuritySettings = (): Promise<AdminSecuritySettingsResponse> => {
   return request.get(endpoints.adminSecurity());
 };

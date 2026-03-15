@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Patch release**\n\n- **Account disable/enable:** Disabled users are blocked at login, MFA, OAuth, and token refresh (403 + audit). Admins can re-enable users from the Users modal.\n- **Delete chat data:** Full Backboard cleanup — threads, documents, and config-assistant file_meta are removed; response includes counts.\n- **Watchdog alerting:** Gmail sender service and nash-alert.py; watchdog sends email after consecutive failures (scripts use env only, no secrets in repo).\n- **Scripts:** nash-health-summary, nashdash, recent-user-stats, tail-aws-logs; .tmuxinator dashboard layout.",
+        "publishedAt": "2026-03-14T00:00:00Z",
+        "tagName": "v2.14.33",
+        "title": "v2.14.33"
+    },
+    {
         "body": "**Hotfix release**\n\n- **User management:** Users tab count updates with \"Active users only\" filter; disabled users persist correctly (active field preserved in user normalization).\n- **Console:** Suppress React \"Cannot update a component ... RouterProvider\" warning in development.",
         "publishedAt": "2026-03-14T00:00:00Z",
         "tagName": "v2.14.32",

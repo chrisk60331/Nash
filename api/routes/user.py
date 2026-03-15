@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 from datetime import datetime, timezone
 
@@ -9,7 +10,7 @@ from api.config import settings
 from api.middleware.jwt_auth import require_jwt
 from api.services import audit_service
 from api.services.user_service import (
-    find_user_by_id, update_user_field, get_user_assistant_id, delete_user,
+    find_user_by_id, update_user_field, get_user_assistant_id, get_user_config_assistant_id, delete_user,
 )
 from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
@@ -27,6 +28,7 @@ USER_MEMORY_INTERNAL_TYPES = {
     "tag", "folder", "preset",
     "user", "librechat_user", "user_memory",
 }
+FILE_META_TYPE = "file_meta"
 
 
 @user_bp.route("/api/user", methods=["GET"])
@@ -71,28 +73,80 @@ def update_profile():
 @require_jwt
 def delete_chat_data():
     assistant_id = get_user_assistant_id(g.user_id)
+    config_assistant_id = get_user_config_assistant_id(g.user_id)
 
     async def _delete_all():
         client = get_client()
         response = await client.get_memories(assistant_id)
         deleted = 0
+        threads_deleted = 0
+        documents_deleted = 0
+        thread_ids: set[str] = set()
         for m in response.memories:
             meta = m.metadata or {}
             mem_type = meta.get("type", "")
+            if mem_type == "thread_mapping":
+                thread_id = meta.get("threadId") or ""
+                if thread_id:
+                    thread_ids.add(str(thread_id))
             if mem_type in CHAT_DATA_TYPES or mem_type not in USER_MEMORY_INTERNAL_TYPES:
                 try:
                     await client.delete_memory(assistant_id=assistant_id, memory_id=m.id)
                     deleted += 1
                 except Exception:
                     pass
-        return deleted
 
-    deleted = run_async(_delete_all())
+        # Delete chat assistant threads after removing mappings
+        for thread_id in thread_ids:
+            try:
+                await client._make_request("DELETE", f"threads/{thread_id}")
+                threads_deleted += 1
+            except Exception:
+                pass
+
+        # Delete live Backboard documents from the chat assistant (source of truth)
+        try:
+            live_docs = await client.list_assistant_documents(assistant_id)
+            for doc in live_docs:
+                try:
+                    await client.delete_document(doc.document_id)
+                    documents_deleted += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Delete file_meta memory records from the config assistant (clears UI file list)
+        if config_assistant_id:
+            config_response = await client.get_memories(config_assistant_id)
+            for m in config_response.memories:
+                meta = m.metadata or {}
+                if meta.get("type") != FILE_META_TYPE:
+                    continue
+                try:
+                    await client.delete_memory(assistant_id=config_assistant_id, memory_id=m.id)
+                    deleted += 1
+                except Exception:
+                    pass
+
+        return {"deleted": deleted, "threads_deleted": threads_deleted, "documents_deleted": documents_deleted}
+
+    result = run_async(_delete_all())
     # Clear in-memory thread cache for this assistant
     conversation_service._thread_map.clear()
     conversation_service._loaded_assistants.discard(assistant_id)
-    audit_service.emit("user.data_deleted", user_id=g.user_id, deleted_count=deleted)
-    return jsonify({"message": f"Cleared {deleted} records"})
+    audit_service.emit(
+        "user.data_deleted",
+        user_id=g.user_id,
+        deleted_count=result.get("deleted", 0),
+        threads_deleted=result.get("threads_deleted", 0),
+        documents_deleted=result.get("documents_deleted", 0),
+    )
+    return jsonify({
+        "message": f"Cleared {result.get('deleted', 0)} records",
+        "threads_deleted": result.get("threads_deleted", 0),
+        "documents_deleted": result.get("documents_deleted", 0),
+    })
 
 
 @user_bp.route("/api/user/terms", methods=["GET"])
@@ -175,11 +229,12 @@ def delete_account():
 
     Order of operations:
       1. Cancel Stripe subscription (if active) — prevents future charges.
-      2. Wipe all memories from the user's config Backboard assistant.
-      3. Wipe all memories from the user's chat Backboard assistant.
-      4. Delete the user's auth record from Backboard.
-      5. Invalidate session (delete refresh token cookie).
-      6. Emit audit event.
+      2. Delete Backboard documents for user-uploaded files.
+      3. Wipe all memories from the user's config Backboard assistant.
+      4. Wipe all memories from the user's chat Backboard assistant.
+      5. Delete the user's auth record from Backboard.
+      6. Invalidate session (delete refresh token cookie).
+      7. Emit audit event.
     """
     user = find_user_by_id(g.user_id)
     if not user:
@@ -209,10 +264,41 @@ def delete_account():
                 pass
         return deleted
 
-    # 2 & 3. Wipe chat + config assistants
+    async def _delete_file_documents(assistant_id: str) -> dict:
+        if not assistant_id:
+            return {"documents_deleted": 0, "file_metas_deleted": 0}
+        client = get_client()
+        response = await client.get_memories(assistant_id)
+        documents_deleted = 0
+        file_metas_deleted = 0
+        for m in response.memories:
+            meta = m.metadata or {}
+            if meta.get("type") != FILE_META_TYPE:
+                continue
+            try:
+                content = json.loads(m.content)
+            except json.JSONDecodeError:
+                content = {}
+            doc_id = content.get("document_id")
+            if doc_id:
+                try:
+                    await client.delete_document(doc_id)
+                    documents_deleted += 1
+                except Exception:
+                    pass
+            try:
+                await client.delete_memory(assistant_id=assistant_id, memory_id=m.id)
+                file_metas_deleted += 1
+            except Exception:
+                pass
+        return {"documents_deleted": documents_deleted, "file_metas_deleted": file_metas_deleted}
+
+    # 2. Delete Backboard documents for user-uploaded files (source of truth)
+    # 3 & 4. Wipe chat + config assistants
     chat_assistant_id = user.get("bbAssistantId", "")
     config_assistant_id = user.get("bbConfigAssistantId", "")
 
+    file_deletes = run_async(_delete_file_documents(config_assistant_id))
     chat_deleted = run_async(_wipe_assistant(chat_assistant_id))
     config_deleted = run_async(_wipe_assistant(config_assistant_id))
 
@@ -229,6 +315,8 @@ def delete_account():
         user_id=g.user_id,
         chat_records_deleted=chat_deleted,
         config_records_deleted=config_deleted,
+        file_documents_deleted=file_deletes.get("documents_deleted", 0),
+        file_metas_deleted=file_deletes.get("file_metas_deleted", 0),
     )
 
     # 5. Clear session cookie

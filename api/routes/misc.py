@@ -852,6 +852,28 @@ def admin_disable_users():
     return jsonify({"disabled": disabled})
 
 
+@misc_bp.route("/api/admin/users/enable", methods=["PATCH"])
+@require_jwt
+def admin_enable_users():
+    caller = find_user_by_id(g.user_id)
+    if not caller or caller.get("role", "").upper() != "ADMIN":
+        return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json() or {}
+    user_ids = data.get("userIds", [])
+    if not user_ids:
+        return jsonify({"error": "userIds required"}), 400
+
+    enabled = []
+    for uid in user_ids:
+        target = find_user_by_id(uid)
+        if target:
+            update_user_field(target, "active", True)
+            enabled.append(uid)
+
+    return jsonify({"enabled": enabled})
+
+
 @misc_bp.route("/api/admin/security", methods=["GET"])
 @require_jwt
 def admin_get_security():

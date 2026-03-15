@@ -22,6 +22,7 @@ const useDeleteChatDataMutation = () => {
       onSuccess: () => {
         queryClient.removeQueries([QueryKeys.allConversations]);
         queryClient.removeQueries([QueryKeys.memories]);
+        queryClient.setQueryData([QueryKeys.files], []);
       },
     },
   );
@@ -53,7 +54,7 @@ export default function DangerZone() {
           <div>
             <p className="text-sm font-medium text-text-primary">Clear chat history & memories</p>
             <p className="mt-0.5 text-xs text-text-secondary">
-              Permanently delete all your conversations and AI memories. This cannot be undone.
+              Permanently delete all your conversations, documents, and AI memories. This cannot be undone.
             </p>
           </div>
           <OGDialogTrigger asChild>
@@ -66,7 +67,7 @@ export default function DangerZone() {
         <OGDialogContent className="w-11/12 max-w-md">
           <OGDialogHeader>
             <OGDialogTitle className="text-lg font-medium leading-6">
-              Clear chat history & memories?
+              Clear chat history, documents, & memories?
             </OGDialogTitle>
           </OGDialogHeader>
           <div className="space-y-3 py-2 text-sm text-text-primary">
@@ -74,6 +75,7 @@ export default function DangerZone() {
             <ul className="list-disc space-y-1 pl-5 font-medium text-red-600 dark:text-red-400">
               <li>All your conversation history</li>
               <li>All AI memories stored about you</li>
+              <li>All your uploaded documents</li>
             </ul>
             <p className="text-text-secondary">This action cannot be undone.</p>
           </div>

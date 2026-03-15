@@ -286,6 +286,10 @@ def login():
             return jsonify({"message": "Too many failed attempts. Account locked for 15 minutes."}), 429
         return jsonify({"message": "Incorrect email or password"}), 401
 
+    if user.get("active") is False:
+        audit_service.emit("auth.login.failure", result="blocked", reason="account_disabled", user_id=user["id"])
+        return jsonify({"message": "Account is disabled."}), 403
+
     lockout_service.record_success(email)
     _ensure_bb_assistant(user)
 
@@ -416,6 +420,9 @@ def confirm_two_factor():
     )
     if error_response:
         return error_response
+    if user.get("active") is False:
+        audit_service.emit("auth.mfa.confirm.failure", result="blocked", reason="account_disabled", user_id=user["id"])
+        return jsonify({"message": "Account is disabled."}), 403
 
     data = request.get_json(silent=True) or {}
     token = (data.get("token") or "").strip()
@@ -509,6 +516,9 @@ def verify_two_factor_temp():
     user = find_user_by_id(payload.get("sub", ""))
     if not user:
         return jsonify({"message": "User not found"}), 404
+    if user.get("active") is False:
+        audit_service.emit("auth.mfa.challenge_failed", result="blocked", reason="account_disabled", user_id=user["id"])
+        return jsonify({"message": "Account is disabled."}), 403
     if not user.get("twoFactorEnabled"):
         return jsonify({"message": "Two-factor authentication is not enabled"}), 400
     if not _validate_active_factor(user, token=token, backup_code=backup_code):
@@ -611,6 +621,10 @@ def oauth_google_callback():
             provider="google",
         )
 
+    if user.get("active") is False:
+        audit_service.emit("auth.oauth.failure", result="blocked", provider="google", reason="account_disabled", user_id=user["id"])
+        return redirect(f"{settings.domain_client}/login?error=account_disabled")
+
     _ensure_bb_assistant(user)
     if not user.get("referredByUserId") and referral_code:
         try:
@@ -673,10 +687,17 @@ def refresh():
     if not user_id:
         audit_service.emit("auth.refresh.failure", result="fail", reason="missing_sub")
         return jsonify({"token": "", "user": None})
+
+    user = find_user_by_id(user_id)
+    if user and user.get("active") is False:
+        audit_service.emit("auth.refresh.failure", result="blocked", reason="account_disabled", user_id=user_id)
+        response = make_response(jsonify({"token": "", "user": None}))
+        response.delete_cookie("refreshToken", path="/")
+        return response
+
     new_access_token = create_access_token(user_id)
     new_refresh_token = create_refresh_token(user_id)
 
-    user = find_user_by_id(user_id)
     if user:
         _ensure_bb_assistant(user)
     user_data = _serialize_user(user) if user else None
