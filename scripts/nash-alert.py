@@ -16,17 +16,6 @@ import os
 import sys
 from pathlib import Path
 
-# Load .env from project root so this works when called from watchdog.
-_env_path = Path(__file__).parent.parent / ".env"
-if _env_path.exists():
-    for line in _env_path.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, val = line.partition("=")
-            os.environ.setdefault(key.strip(), val.strip())
-
-# Allow running from repo root without installing the package.
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.services.gmail_sender import SendEmailRequest, send_email
 
@@ -57,6 +46,7 @@ def main() -> None:
     if result.success:
         print("Alert sent.")
     else:
+        print(f"Alert to {recipient}: {subject} GMAIL_APP_PASSWORD: {os.getenv('GMAIL_APP_PASSWORD')}", file=sys.stderr)
         print(f"Alert FAILED: {result.error}", file=sys.stderr)
         sys.exit(1)
 

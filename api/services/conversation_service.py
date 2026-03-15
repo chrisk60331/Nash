@@ -105,6 +105,23 @@ def save_conversation_meta(assistant_id: str, conversation_id: str, meta: dict) 
     run_async(_save_conversation_meta(assistant_id, conversation_id, meta))
 
 
+async def _get_conversation_meta(assistant_id: str, conversation_id: str) -> dict:
+    client = get_client()
+    existing = await client.get_memories(assistant_id)
+    for m in existing.memories:
+        mm = m.metadata or {}
+        if mm.get("type") == CONVO_META_TYPE and mm.get("conversationId") == conversation_id:
+            try:
+                return json.loads(m.content)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+
+def get_conversation_meta(assistant_id: str, conversation_id: str) -> dict:
+    return run_async(_get_conversation_meta(assistant_id, conversation_id))
+
+
 async def _list_conversations(assistant_id: str) -> list[dict]:
     client = get_client()
     response = await client.get_memories(assistant_id)

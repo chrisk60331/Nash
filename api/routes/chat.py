@@ -24,6 +24,7 @@ from api.services.conversation_service import (
     get_or_create_thread,
     save_conversation_meta,
     _save_conversation_meta,
+    _get_conversation_meta,
     save_regen_graph,
 )
 from api.services.token_service import check_token_limit, record_token_usage
@@ -746,6 +747,10 @@ def stream_chat(stream_id):
         elif len(full_text) > 60:
             title += "..."
 
+        existing_meta = run_async(_get_conversation_meta(ctx["assistant_id"], conversation_id))
+        existing_title = existing_meta.get("title", "")
+        should_set_title = not existing_title or existing_title == "New Chat"
+
         if is_regenerate:
             try:
                 bb_msgs = run_async(get_thread_messages(thread_id))
@@ -764,7 +769,9 @@ def stream_chat(stream_id):
                 logger.exception("[chat] stream: failed to save regen graph")
 
         try:
-            meta = {"title": title, "endpoint": endpoint, "model": model}
+            meta = {"endpoint": endpoint, "model": model}
+            if should_set_title:
+                meta["title"] = title
             if ctx.get("folder_id"):
                 meta["folderId"] = ctx["folder_id"]
             run_async(_save_conversation_meta(ctx["assistant_id"], conversation_id, meta))

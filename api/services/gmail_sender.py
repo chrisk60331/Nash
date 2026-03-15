@@ -146,11 +146,11 @@ def send_email(req: SendEmailRequest) -> SendEmailResult:
 
         return SendEmailResult(success=True, to_email=req.to_email)
 
-    except smtplib.SMTPAuthenticationError:
+    except smtplib.SMTPAuthenticationError as e:
         return SendEmailResult(
             success=False,
             to_email=req.to_email,
-            error="Gmail authentication failed — check GMAIL_USER and GMAIL_APP_PASSWORD",
+            error=f"Gmail authentication failed — check GMAIL_USER: {gmail_user} and GMAIL_APP_PASSWORD: {gmail_password} {e}",
         )
     except Exception as e:
         return SendEmailResult(

@@ -26,6 +26,7 @@ POLL_INTERVAL="${POLL_INTERVAL:-5}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-5}"
 INIT_TIMEOUT="${INIT_TIMEOUT:-15}"
 INIT_WARN_SEC="${INIT_WARN_SEC:-6}"
+TEST_ALERT="${TEST_ALERT:-0}"
 
 RED='\033[0;31m'
 YLW='\033[1;33m'
@@ -38,10 +39,11 @@ CONSEC_FAIL=0         # consecutive failures; resets on any success
 ALERT_THRESHOLD=3     # send email after this many consecutive failures
 BODY_FILE="/tmp/nash-watchdog-init-$$.json"
 HEALTH_FILE="/tmp/nash-watchdog-health-$$.json"
+IS_FAILED=0
 
 _send_alert() {
   local subject="$1" body="$2"
-  uv run python3 "$(dirname "$0")/nash-alert.py" "${subject}" "${body}" 2>&1 \
+  PYTHONPATH=. uv run --env-file .env python3 "$(dirname "$0")/nash-alert.py" "${subject}" "${body}" 2>&1 \
     | sed 's/^/  [alert] /' || true
 }
 
@@ -135,6 +137,16 @@ Check App Runner logs and restart if needed."
   set -e
   INIT_MS=$(( $(_ms_now) - T0 ))
 
+  if [[ "${TEST_ALERT}" -eq "1" ]]; then
+      _send_alert \
+        "TEST: Test alert ${CONSEC_FAIL}x" \
+        "Nash watchdog detected test alert at ${TS}.
+
+Version: ${VER}  Total checks: ${CHECK_COUNT}  Total failures: ${FAIL_COUNT}
+
+Test alert sent."
+    fi
+
   # Auto-refresh JWT on 401 and retry once
   if [[ "${INIT_STATUS}" == "401" && -n "${REFRESH_TOKEN}" ]]; then
     _refresh_jwt
@@ -169,6 +181,7 @@ Version: ${VER}  Total checks: ${CHECK_COUNT}  Total failures: ${FAIL_COUNT}
 Check App Runner logs and restart if needed."
     fi
 
+
   elif [[ "${INIT_EXIT}" -ne 0 || "${INIT_STATUS}" != "200" ]]; then
     printf "\a"
     printf "${RED}[%s][%s] FAIL  /api/init: http=%s curl_exit=%d (%dms) (check=%d fails=%d)${RST}\n" \
@@ -194,11 +207,30 @@ Check App Runner logs and restart if needed."
     printf "${YLW}[%s][%s] SLOW  /api/init: %dms (>${INIT_WARN_SEC}s warn) health=%dms (check=%d fails=%d)${RST}\n" \
       "${TS}" "${VER}" "${INIT_MS}" "${HEALTH_MS}" "${CHECK_COUNT}" "${FAIL_COUNT}"
     CONSEC_FAIL=0
+    if [[ "${IS_FAILED}" -eq 1 ]]; then
+      _send_alert \
+        "ALERT: Nash recovered but is SLOW ${CONSEC_FAIL}x" \
+        "Nash watchdog recovered from failure but is still slow at ${TS}.
 
+Endpoint: ${BASE_URL}/api/init
+Response time: ${INIT_MS}ms  Health check: ${HEALTH_MS}ms
+Version: ${VER}  Total checks: ${CHECK_COUNT}  Total failures: ${FAIL_COUNT}"
+      fi
+    IS_FAILED=0
   else
     printf "${GRN}[%s][%s] OK    health=%dms  init=%dms  (check=%d fails=%d)${RST}\n" \
       "${TS}" "${VER}" "${HEALTH_MS}" "${INIT_MS}" "${CHECK_COUNT}" "${FAIL_COUNT}"
     CONSEC_FAIL=0
+    if [[ "${IS_FAILED}" -eq 1 ]]; then
+      _send_alert \
+        "ALERT: Nash recovered from failure ${CONSEC_FAIL}x" \
+        "Nash watchdog recovered from failure at ${TS}.
+
+Endpoint: ${BASE_URL}/api/init
+Response time: ${INIT_MS}ms  Health check: ${HEALTH_MS}ms
+Version: ${VER}  Total checks: ${CHECK_COUNT}  Total failures: ${FAIL_COUNT}"
+    fi
+    IS_FAILED=0
   fi
 
   sleep "${POLL_INTERVAL}"

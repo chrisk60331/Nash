@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Patch release**\n\n- **Chat title:** Conversation title is set only when untitled (first assistant reply); subsequent replies no longer overwrite the title.\n- **Watchdog scripts:** nash-watchdog.sh uses `--env-file .env` for nash-alert.py; TEST_ALERT=1 sends a test email; recovery alerts when Nash recovers from failure or slow state. nash-alert.py loads env from caller (no in-script .env parsing).\n- **Gmail sender:** SMTP auth errors include GMAIL_USER and exception detail for easier debugging.",
+        "publishedAt": "2026-03-15T00:00:00Z",
+        "tagName": "v2.14.34",
+        "title": "v2.14.34"
+    },
+    {
         "body": "**Patch release**\n\n- **Account disable/enable:** Disabled users are blocked at login, MFA, OAuth, and token refresh (403 + audit). Admins can re-enable users from the Users modal.\n- **Delete chat data:** Full Backboard cleanup — threads, documents, and config-assistant file_meta are removed; response includes counts.\n- **Watchdog alerting:** Gmail sender service and nash-alert.py; watchdog sends email after consecutive failures (scripts use env only, no secrets in repo).\n- **Scripts:** nash-health-summary, nashdash, recent-user-stats, tail-aws-logs; .tmuxinator dashboard layout.",
         "publishedAt": "2026-03-14T00:00:00Z",
         "tagName": "v2.14.33",
