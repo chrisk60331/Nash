@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Status URL:** Point status page link to new App Runner instance (https://iuxv6rvzbp.us-west-2.awsapprunner.com/status/nash).",
+        "publishedAt": "2026-03-17T00:00:00Z",
+        "tagName": "v2.14.35",
+        "title": "v2.14.35"
+    },
+    {
         "body": "**Patch release**\n\n- **Chat title:** Conversation title is set only when untitled (first assistant reply); subsequent replies no longer overwrite the title.\n- **Watchdog scripts:** nash-watchdog.sh uses `--env-file .env` for nash-alert.py; TEST_ALERT=1 sends a test email; recovery alerts when Nash recovers from failure or slow state. nash-alert.py loads env from caller (no in-script .env parsing).\n- **Gmail sender:** SMTP auth errors include GMAIL_USER and exception detail for easier debugging.",
         "publishedAt": "2026-03-15T00:00:00Z",
         "tagName": "v2.14.34",

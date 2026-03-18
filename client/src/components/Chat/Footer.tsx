@@ -77,7 +77,7 @@ export default function Footer({ className }: { className?: string }) {
 
   const statusUrl =
     ((config as Record<string, unknown>)?.statusPageURL as string | undefined) ??
-    'https://crimson-rabbit-6111.statusgator.app';
+    'https://iuxv6rvzbp.us-west-2.awsapprunner.com/status/nash';
   const supportUrl =
     ((config as Record<string, unknown>)?.supportURL as string | undefined) ??
     'mailto:support@backboard.io';

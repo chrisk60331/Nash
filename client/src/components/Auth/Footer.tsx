@@ -8,7 +8,7 @@ function Footer({ startupConfig }: { startupConfig: TStartupConfig | null | unde
 
   const statusUrl =
     ((startupConfig as Record<string, unknown>)?.statusPageURL as string | undefined) ??
-    'https://crimson-rabbit-6111.statusgator.app';
+    'https://iuxv6rvzbp.us-west-2.awsapprunner.com/status/nash';
   const supportUrl =
     ((startupConfig as Record<string, unknown>)?.supportURL as string | undefined) ??
     'mailto:support@backboard.io';

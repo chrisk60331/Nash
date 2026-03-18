@@ -198,7 +198,7 @@ export default function Docs() {
           <Q q="A model isn't responding / I'm getting errors.">
             Check the{' '}
             <a
-              href="https://crimson-rabbit-6111.statusgator.app"
+              href="https://iuxv6rvzbp.us-west-2.awsapprunner.com/status/nash"
               target="_blank"
               rel="noreferrer"
               className="text-green-500 hover:underline"
