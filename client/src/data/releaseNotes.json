@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **MCP tool error resilience:** Wrap each MCP tool call in try/except so a failing tool emits an error result instead of propagating an exception that leaves a dangling tool_call in the Backboard thread. Prevents 400 errors from Anthropic/OpenAI when MCP is toggled off mid-conversation.\n- **Billing currency:** Fix Plus and Unlimited plan price display from CAD to USD on all billing screens.\n- **Watchdog IS_FAILED flag:** Set `IS_FAILED=1` on hung and non-200 paths before incrementing `CONSEC_FAIL`, and move `CONSEC_FAIL=0` reset after the recovery alert so slow/OK recovery alerts fire correctly.\n- **build.sh trap:** Move cleanup trap registration before the deployment wait loop so SIGINT/EXIT always cleans up log-tail PIDs.",
+        "publishedAt": "2026-03-19T00:00:00Z",
+        "tagName": "v2.14.36",
+        "title": "v2.14.36"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Status URL:** Point status page link to new App Runner instance (https://iuxv6rvzbp.us-west-2.awsapprunner.com/status/nash).",
         "publishedAt": "2026-03-17T00:00:00Z",
         "tagName": "v2.14.35",

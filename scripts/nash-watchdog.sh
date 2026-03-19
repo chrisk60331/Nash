@@ -168,6 +168,7 @@ Test alert sent."
     printf "${RED}[%s][%s] HUNG  /api/init: TIMED OUT after %ds — NON-RESPONSIVE CONDITION DETECTED (check=%d fails=%d)${RST}\n" \
       "${TS}" "${VER}" "${INIT_TIMEOUT}" "${CHECK_COUNT}" "$((FAIL_COUNT + 1))"
     FAIL_COUNT=$((FAIL_COUNT + 1))
+    IS_FAILED=1
     CONSEC_FAIL=$((CONSEC_FAIL + 1))
     if [[ "${CONSEC_FAIL}" -eq "${ALERT_THRESHOLD}" ]]; then
       _send_alert \
@@ -191,6 +192,7 @@ Check App Runner logs and restart if needed."
     fi
     FAIL_COUNT=$((FAIL_COUNT + 1))
     CONSEC_FAIL=$((CONSEC_FAIL + 1))
+    IS_FAILED=1
     if [[ "${CONSEC_FAIL}" -eq "${ALERT_THRESHOLD}" ]]; then
       _send_alert \
         "ALERT: Nash is DOWN ${CONSEC_FAIL}x" \
@@ -206,8 +208,7 @@ Check App Runner logs and restart if needed."
   elif [[ "${INIT_MS}" -gt $((INIT_WARN_SEC * 1000)) ]]; then
     printf "${YLW}[%s][%s] SLOW  /api/init: %dms (>${INIT_WARN_SEC}s warn) health=%dms (check=%d fails=%d)${RST}\n" \
       "${TS}" "${VER}" "${INIT_MS}" "${HEALTH_MS}" "${CHECK_COUNT}" "${FAIL_COUNT}"
-    CONSEC_FAIL=0
-    if [[ "${IS_FAILED}" -eq 1 ]]; then
+    if [[ "${IS_FAILED}" -eq 1 && "${CONSEC_FAIL}" -gt "${ALERT_THRESHOLD}" ]]; then
       _send_alert \
         "ALERT: Nash recovered but is SLOW ${CONSEC_FAIL}x" \
         "Nash watchdog recovered from failure but is still slow at ${TS}.
@@ -216,12 +217,12 @@ Endpoint: ${BASE_URL}/api/init
 Response time: ${INIT_MS}ms  Health check: ${HEALTH_MS}ms
 Version: ${VER}  Total checks: ${CHECK_COUNT}  Total failures: ${FAIL_COUNT}"
       fi
+    CONSEC_FAIL=0
     IS_FAILED=0
   else
     printf "${GRN}[%s][%s] OK    health=%dms  init=%dms  (check=%d fails=%d)${RST}\n" \
       "${TS}" "${VER}" "${HEALTH_MS}" "${INIT_MS}" "${CHECK_COUNT}" "${FAIL_COUNT}"
-    CONSEC_FAIL=0
-    if [[ "${IS_FAILED}" -eq 1 ]]; then
+    if [[ "${IS_FAILED}" -eq 1 && "${CONSEC_FAIL}" -gt "${ALERT_THRESHOLD}" ]]; then
       _send_alert \
         "ALERT: Nash recovered from failure ${CONSEC_FAIL}x" \
         "Nash watchdog recovered from failure at ${TS}.
@@ -230,6 +231,7 @@ Endpoint: ${BASE_URL}/api/init
 Response time: ${INIT_MS}ms  Health check: ${HEALTH_MS}ms
 Version: ${VER}  Total checks: ${CHECK_COUNT}  Total failures: ${FAIL_COUNT}"
     fi
+    CONSEC_FAIL=0
     IS_FAILED=0
   fi
 

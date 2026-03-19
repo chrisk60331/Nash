@@ -113,6 +113,11 @@ aws logs tail "${LOG_GROUP}" \
   --since 1m \
   --format short &
 APP_TAIL_PID=$!
+cleanup() {
+  kill "${TAIL_PID}" 2>/dev/null || true
+  kill "${APP_TAIL_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT SIGINT SIGTERM 
 
 while [ "$(aws apprunner describe-service --service-arn "${SERVICE_ARN}" --region "${AWS_REGION}" | jq -r '.Service.Status')" = "OPERATION_IN_PROGRESS" ]; do
     sleep 10
@@ -122,9 +127,3 @@ done
 STATUS="$(aws apprunner describe-service --service-arn "${SERVICE_ARN}" --region "${AWS_REGION}" | jq -r '.Service.Status')"
 echo ""
 echo "Deployment completed — status: ${STATUS}"
-
-cleanup() {
-  kill "${TAIL_PID}" 2>/dev/null || true
-  kill "${APP_TAIL_PID}" 2>/dev/null || true
-}
-trap cleanup EXIT SIGINT SIGTERM 

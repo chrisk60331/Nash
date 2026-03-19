@@ -187,7 +187,10 @@ async def run_with_tool_loop(
                 server = _find_server_for_tool(prefixed_name, mcp_server_map)
 
             if server:
-                output = await call_mcp_tool(server, real_tool_name, arguments)
+                try:
+                    output = await call_mcp_tool(server, real_tool_name, arguments)
+                except Exception as tool_exc:
+                    output = json.dumps({"error": f"Tool '{real_tool_name}' failed: {tool_exc}"})
             else:
                 output = json.dumps({"error": f"No MCP server found for tool '{prefixed_name}'"})
 
