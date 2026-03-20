@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Chrome `/` prompt selector:** Fixed click and keyboard selection in Chrome. Group is resolved at render time (avoiding stale closure), panel-level `onMouseDown` prevents blur-before-click, blur timeout extended to 500ms so virtualized rows are not unmounted before the click fires. Autofill noise from unnamed inputs also silenced.",
+        "publishedAt": "2026-03-20T00:00:00Z",
+        "tagName": "v2.14.39",
+        "title": "v2.14.39"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Pinned models & agents (Backboard):** `GET /api/user/settings/favorites` and `/api/init` now return a JSON array (not `{ favorites: [] }`), so the left-drawer pins hydrate correctly after a hard refresh. Favorites remain stored as `user_favorites` memory on the user config assistant.\n- **Client:** Favorites atom no longer uses browser `localStorage`; legacy key is cleared on startup. Response normalization tolerates the old envelope.",
         "publishedAt": "2026-03-20T00:00:00Z",
         "tagName": "v2.14.38",

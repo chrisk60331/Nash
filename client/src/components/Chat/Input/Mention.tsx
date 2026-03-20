@@ -145,6 +145,9 @@ export default function Mention({
         index={index}
         key={key}
         style={style}
+        onMouseDown={(e) => {
+          e.preventDefault();
+        }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

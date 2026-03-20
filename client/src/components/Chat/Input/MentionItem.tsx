@@ -5,6 +5,7 @@ import { cn } from '~/utils';
 export interface MentionItemProps {
   name: string;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onMouseDown?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   index: number;
   type?: 'prompt' | 'mention' | 'add-convo';
   icon?: React.ReactNode;
@@ -16,6 +17,7 @@ export interface MentionItemProps {
 export default function MentionItem({
   name,
   onClick,
+  onMouseDown,
   index,
   icon,
   isActive,
@@ -28,6 +30,7 @@ export default function MentionItem({
       type="button"
       style={style}
       tabIndex={index}
+      onMouseDown={onMouseDown}
       onClick={onClick}
       id={`${type}-item-${index}`}
       className="w-full touch-manipulation"

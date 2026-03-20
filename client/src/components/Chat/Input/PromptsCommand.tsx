@@ -62,6 +62,7 @@ function PromptsCommand({
   const localize = useLocalize();
   const { allPromptGroups, hasAccess } = usePromptGroupsContext();
   const { data, isLoading } = allPromptGroups;
+  const showPromptsPopover = useRecoilValue(store.showPromptsPopoverFamily(index));
 
   const [activeIndex, setActiveIndex] = useState(0);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -69,6 +70,8 @@ function PromptsCommand({
   const [isVariableDialogOpen, setVariableDialogOpen] = useState(false);
   const [variableGroup, setVariableGroup] = useState<TPromptGroup | null>(null);
   const setShowPromptsPopover = useSetRecoilState(store.showPromptsPopoverFamily(index));
+
+  const promptFilterInputId = `chat-prompt-command-filter-${index}`;
 
   const prompts = useMemo(() => data?.promptGroups, [data]);
   const promptsMap = useMemo(() => data?.promptsMap, [data]);
@@ -79,8 +82,8 @@ function PromptsCommand({
   });
 
   const handleSelect = useCallback(
-    (mention?: PromptOption, e?: React.KeyboardEvent<HTMLInputElement>) => {
-      if (!mention) {
+    (group?: TPromptGroup, e?: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!group) {
         return;
       }
 
@@ -90,11 +93,6 @@ function PromptsCommand({
 
       if (textAreaRef.current) {
         removeCharIfLast(textAreaRef.current, commandChar);
-      }
-
-      const group = promptsMap?.[mention.id];
-      if (!group) {
-        return;
       }
 
       const hasVariables = detectVariables(group.productionPrompt?.prompt ?? '');
@@ -109,8 +107,18 @@ function PromptsCommand({
         submitPrompt(group.productionPrompt?.prompt ?? '');
       }
     },
-    [setSearchValue, setOpen, setShowPromptsPopover, textAreaRef, promptsMap, submitPrompt],
+    [setSearchValue, setOpen, setShowPromptsPopover, textAreaRef, submitPrompt],
   );
+
+  useEffect(() => {
+    if (!showPromptsPopover) {
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showPromptsPopover]);
 
   useEffect(() => {
     if (!open) {
@@ -129,9 +137,12 @@ function PromptsCommand({
   }, []);
 
   useEffect(() => {
+    if (!matches.length) {
+      return;
+    }
     const currentActiveItem = document.getElementById(`prompt-item-${activeIndex}`);
     currentActiveItem?.scrollIntoView({ behavior: 'instant', block: 'nearest' });
-  }, [activeIndex]);
+  }, [activeIndex, matches.length]);
 
   if (!hasAccess) {
     return null;
@@ -147,18 +158,21 @@ function PromptsCommand({
     style: React.CSSProperties;
   }) => {
     const mention = matches[index] as PromptOption;
+    const group = promptsMap?.[mention.id];
     return (
       <MentionItem
         index={index}
         type="prompt"
         key={key}
         style={style}
-        onClick={() => {
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
           }
           timeoutRef.current = null;
-          handleSelect(mention);
+          handleSelect(group);
         }}
         name={mention.label ?? ''}
         icon={mention.icon}
@@ -176,33 +190,52 @@ function PromptsCommand({
       setVariableDialogOpen={setVariableDialogOpen}
       textAreaRef={textAreaRef}
     >
-      <div className="absolute bottom-28 z-10 w-full space-y-2">
-        <div className="popover border-token-border-light rounded-2xl border bg-surface-tertiary-alt p-2 shadow-lg">
+      <div className="absolute bottom-28 z-50 w-full space-y-2 isolate">
+        <div
+          className="popover border-token-border-light rounded-2xl border bg-surface-tertiary-alt p-2 shadow-lg"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
           <input
             // The user expects focus to transition to the input field when the popover is opened
             // eslint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
             ref={inputRef}
+            id={promptFilterInputId}
+            name={`promptCommandFilter-${index}`}
             placeholder={localize('com_ui_command_usage_placeholder')}
             className="mb-1 w-full border-0 bg-surface-tertiary-alt p-2 text-sm focus:outline-none dark:text-gray-200"
             autoComplete="off"
             value={searchValue}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
+                e.preventDefault();
                 setOpen(false);
                 setShowPromptsPopover(false);
                 textAreaRef.current?.focus();
               }
               if (e.key === 'ArrowDown') {
+                if (!matches.length) {
+                  return;
+                }
+                e.preventDefault();
                 setActiveIndex((prevIndex) => (prevIndex + 1) % matches.length);
               } else if (e.key === 'ArrowUp') {
+                if (!matches.length) {
+                  return;
+                }
+                e.preventDefault();
                 setActiveIndex((prevIndex) => (prevIndex - 1 + matches.length) % matches.length);
               } else if (e.key === 'Enter' || e.key === 'Tab') {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                }
-                handleSelect(matches[activeIndex] as PromptOption | undefined, e);
+                e.preventDefault();
+                e.stopPropagation();
+                const activeMention = matches[activeIndex] as PromptOption | undefined;
+                const activeGroup = activeMention ? promptsMap?.[activeMention.id] : undefined;
+                handleSelect(activeGroup, e);
               } else if (e.key === 'Backspace' && searchValue === '') {
+                e.preventDefault();
                 setOpen(false);
                 setShowPromptsPopover(false);
                 textAreaRef.current?.focus();
@@ -214,7 +247,7 @@ function PromptsCommand({
               timeoutRef.current = setTimeout(() => {
                 setOpen(false);
                 setShowPromptsPopover(false);
-              }, 150);
+              }, 500);
             }}
           />
           <div className="max-h-40 overflow-y-auto">
