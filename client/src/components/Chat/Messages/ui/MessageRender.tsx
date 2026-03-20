@@ -139,7 +139,6 @@ const MessageRender = memo(
           {!hasParallelContent && (
             <h2 className={cn('select-none font-semibold', fontSize)}>{messageLabel}</h2>
           )}
-
           <div className="flex flex-col gap-1">
             <div className="flex max-w-full flex-grow flex-col gap-0">
               <MessageContext.Provider
@@ -171,6 +170,11 @@ const MessageRender = memo(
               <PlaceholderRow />
             ) : (
               <SubRow classes="text-xs">
+                {!msg.isCreatedByUser && (msg.model || conversation?.model) && (
+                  <span className="select-none font-mono opacity-50 mr-2">
+                    {`model: ${msg.model || conversation?.model || ''}`}
+                  </span>
+                )}
                 <SiblingSwitch
                   siblingIdx={siblingIdx}
                   siblingCount={siblingCount}
