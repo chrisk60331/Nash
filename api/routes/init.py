@@ -48,7 +48,13 @@ def _parse_memory(m) -> tuple[str, dict | None]:
     meta = m.metadata or {}
     mtype = meta.get("type", "")
     try:
-        data = json.loads(m.content)
+        raw = json.loads(m.content)
+        if isinstance(raw, dict):
+            data = dict(raw)
+        elif isinstance(raw, list) and mtype == FAVORITES_META_TYPE:
+            data = {"favorites": raw}
+        else:
+            return mtype, None
         data["_memory_id"] = m.id
         data["_meta"] = meta
         return mtype, data
@@ -124,7 +130,7 @@ def init():
     presets = []
     convos = []
     prompt_groups = []
-    favorites = {}
+    favorites_list: list = []
     tags = []
     folders = []
     mcp_servers = []
@@ -157,7 +163,10 @@ def init():
             prompt_groups.append(data)
 
         elif mtype == FAVORITES_META_TYPE:
-            favorites = data
+            fav_clean = _clean(data)
+            inner = fav_clean.get("favorites") if isinstance(fav_clean, dict) else None
+            if isinstance(inner, list):
+                favorites_list = inner
 
         elif mtype == TAG_META_TYPE:
             tags.append(data)
@@ -202,7 +211,7 @@ def init():
         },
         "promptGroups": [_clean(pg) for pg in prompt_groups],
         "allPrompts": [_clean(pg) for pg in prompt_groups],
-        "favorites": _clean(favorites) if favorites else {},
+        "favorites": favorites_list,
         "tags": [_clean(t) for t in tags],
         "folders": [_clean(f) for f in folders],
         "balance": get_balance_response_from_memories(response.memories, g.user_id),

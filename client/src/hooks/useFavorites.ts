@@ -13,7 +13,9 @@ const MAX_FAVORITES = 50;
 /**
  * Hook for managing user favorites (pinned agents and models).
  *
- * Favorites are synchronized with the server via `/api/user/settings/favorites`.
+ * Favorites persist in Backboard (user config assistant memory `user_favorites`)
+ * via `GET`/`POST` `/api/user/settings/favorites` and `/api/init`.
+ *
  * Each favorite is either:
  * - An agent: `{ agentId: string }`
  * - A model: `{ model: string, endpoint: string }`
@@ -21,6 +23,20 @@ const MAX_FAVORITES = 50;
  * @returns Object containing favorites state and helper methods for
  * adding, removing, toggling, reordering, and checking favorites.
  */
+
+/** API returns a JSON array; tolerate legacy `{ favorites: [] }` envelopes. */
+function normalizeFavoritesResponse(data: unknown): Favorite[] {
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (data && typeof data === 'object' && 'favorites' in data) {
+    const inner = (data as { favorites: unknown }).favorites;
+    if (Array.isArray(inner)) {
+      return inner;
+    }
+  }
+  return [];
+}
 
 /**
  * Cleans favorites array to only include canonical shapes (agentId or model+endpoint).
@@ -55,12 +71,8 @@ export default function useFavorites() {
     if (isMutatingRef.current || updateFavoritesMutation.isLoading) {
       return;
     }
-    if (getFavoritesQuery.data) {
-      if (Array.isArray(getFavoritesQuery.data)) {
-        setFavorites(getFavoritesQuery.data);
-      } else {
-        setFavorites([]);
-      }
+    if (getFavoritesQuery.data !== undefined) {
+      setFavorites(cleanFavorites(normalizeFavoritesResponse(getFavoritesQuery.data)));
     }
   }, [getFavoritesQuery.data, setFavorites, updateFavoritesMutation.isLoading]);
 

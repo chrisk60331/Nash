@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Pinned models & agents (Backboard):** `GET /api/user/settings/favorites` and `/api/init` now return a JSON array (not `{ favorites: [] }`), so the left-drawer pins hydrate correctly after a hard refresh. Favorites remain stored as `user_favorites` memory on the user config assistant.\n- **Client:** Favorites atom no longer uses browser `localStorage`; legacy key is cleared on startup. Response normalization tolerates the old envelope.",
+        "publishedAt": "2026-03-20T00:00:00Z",
+        "tagName": "v2.14.38",
+        "title": "v2.14.38"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Model label in chat:** Each Nash response now shows `model: provider/model_name` in the message footer, making it easy to see which model answered — especially useful when switching models mid-thread. Hat tip to Rob for the request.",
         "publishedAt": "2026-03-20T00:00:00Z",
         "tagName": "v2.14.37",

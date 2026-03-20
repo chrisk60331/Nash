@@ -902,18 +902,30 @@ def admin_update_security():
 # --------------- Favorites ---------------
 
 async def _get_favorites(assistant_id: str) -> dict:
+    """Load favorites payload from Backboard; returns dict with favorites, _memory_id."""
     client = get_client()
     response = await client.get_memories(assistant_id)
     for m in response.memories:
         meta = m.metadata or {}
         if meta.get("type") == FAVORITES_META_TYPE:
             try:
-                data = json.loads(m.content)
-                data["_memory_id"] = m.id
-                return data
+                payload = json.loads(m.content)
+                if isinstance(payload, list):
+                    return {"favorites": payload, "_memory_id": m.id}
+                if isinstance(payload, dict):
+                    data = dict(payload)
+                    data["_memory_id"] = m.id
+                    return data
             except json.JSONDecodeError:
                 pass
     return {}
+
+
+def _favorites_array_from_payload(favs: dict) -> list:
+    if not isinstance(favs, dict):
+        return []
+    raw = favs.get("favorites")
+    return raw if isinstance(raw, list) else []
 
 
 @misc_bp.route("/api/user/settings/favorites", methods=["GET"])
@@ -921,16 +933,20 @@ async def _get_favorites(assistant_id: str) -> dict:
 def user_favorites():
     assistant_id = get_user_config_assistant_id(g.user_id)
     favs = run_async(_get_favorites(assistant_id))
-    return jsonify({k: v for k, v in favs.items() if k != "_memory_id"})
+    return jsonify(_favorites_array_from_payload(favs))
 
 
 @misc_bp.route("/api/user/settings/favorites", methods=["POST"])
 @require_jwt
 def update_favorites():
-    data = request.get_json() or {}
+    body = request.get_json() or {}
+    favorites = body.get("favorites")
+    if not isinstance(favorites, list):
+        return jsonify({"error": "expected body { favorites: array }"}), 400
     assistant_id = get_user_config_assistant_id(g.user_id)
     existing = run_async(_get_favorites(assistant_id))
     memory_id = existing.get("_memory_id")
+    to_store = {"favorites": favorites}
 
     async def _save():
         client = get_client()
@@ -938,18 +954,18 @@ def update_favorites():
             await client.update_memory(
                 assistant_id=assistant_id,
                 memory_id=memory_id,
-                content=json.dumps(data),
+                content=json.dumps(to_store),
                 metadata={"type": FAVORITES_META_TYPE},
             )
         else:
             await client.add_memory(
                 assistant_id=assistant_id,
-                content=json.dumps(data),
+                content=json.dumps(to_store),
                 metadata={"type": FAVORITES_META_TYPE},
             )
 
     run_async(_save())
-    return jsonify(data)
+    return jsonify(favorites)
 
 
 # --------------- Speech / Permissions / Code Auth ---------------

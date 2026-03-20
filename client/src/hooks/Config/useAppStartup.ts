@@ -4,6 +4,7 @@ import TagManager from 'react-gtm-module';
 import { LocalStorageKeys } from 'librechat-data-provider';
 import type { TStartupConfig, TUser } from 'librechat-data-provider';
 import { cleanupTimestampedStorage } from '~/utils/timestamps';
+import { LEGACY_FAVORITES_STORAGE_KEY } from '~/store/favorites';
 import useSpeechSettingsInit from './useSpeechSettingsInit';
 import { useMCPToolsQuery, useMCPServersQuery } from '~/data-provider';
 import store from '~/store';
@@ -27,6 +28,7 @@ export default function useAppStartup({
   /** Clean up old localStorage entries on startup */
   useEffect(() => {
     cleanupTimestampedStorage();
+    localStorage.removeItem(LEGACY_FAVORITES_STORAGE_KEY);
   }, []);
 
   /** Set the app title */
