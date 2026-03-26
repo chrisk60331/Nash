@@ -1,15 +1,17 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
 
 from api.middleware.jwt_auth import require_jwt
-from api.services.backboard_service import get_thread_messages
 from api.services.async_runner import run_async
-from api.services.user_service import get_user_assistant_id
+from api.services.backboard_service import get_thread_messages
 from api.services.conversation_service import (
+    _get_conversation_meta,
+    get_conversation_forked_messages,
+    get_fallback_notice_map,
+    get_regen_graph,
     get_thread_id_for_conversation,
     list_conversations,
-    get_conversation_forked_messages,
-    get_regen_graph,
 )
+from api.services.user_service import get_user_assistant_id
 
 messages_bp = Blueprint("messages", __name__)
 
@@ -31,7 +33,9 @@ def search_messages():
         if not conversation_id:
             continue
 
-        thread_id = get_thread_id_for_conversation(conversation_id, assistant_id=assistant_id)
+        thread_id = get_thread_id_for_conversation(
+            conversation_id, assistant_id=assistant_id
+        )
         if not thread_id:
             continue
 
@@ -46,19 +50,21 @@ def search_messages():
         for m in bb_messages:
             text = m.content or ""
             if search_query in text.lower():
-                matched_messages.append({
-                    "messageId": str(m.message_id),
-                    "conversationId": conversation_id,
-                    "parentMessageId": "00000000-0000-0000-0000-000000000000",
-                    "text": text,
-                    "title": convo.get("title", "New Chat"),
-                    "sender": "User" if m.role == "user" else "Nash",
-                    "isCreatedByUser": m.role == "user",
-                    "endpoint": "agents",
-                    "createdAt": m.created_at.isoformat() if m.created_at else "",
-                    "updatedAt": m.created_at.isoformat() if m.created_at else "",
-                    "error": False,
-                })
+                matched_messages.append(
+                    {
+                        "messageId": str(m.message_id),
+                        "conversationId": conversation_id,
+                        "parentMessageId": "00000000-0000-0000-0000-000000000000",
+                        "text": text,
+                        "title": convo.get("title", "New Chat"),
+                        "sender": "User" if m.role == "user" else "Nash",
+                        "isCreatedByUser": m.role == "user",
+                        "endpoint": "agents",
+                        "createdAt": m.created_at.isoformat() if m.created_at else "",
+                        "updatedAt": m.created_at.isoformat() if m.created_at else "",
+                        "error": False,
+                    }
+                )
 
     return jsonify({"messages": matched_messages, "nextCursor": None})
 
@@ -67,9 +73,22 @@ def search_messages():
 @require_jwt
 def get_messages(conversation_id):
     assistant_id = get_user_assistant_id(g.user_id)
-    thread_id = get_thread_id_for_conversation(conversation_id, assistant_id=assistant_id)
+    thread_id = get_thread_id_for_conversation(
+        conversation_id, assistant_id=assistant_id
+    )
     if not thread_id:
         return jsonify([])
+
+    # Fetch conversation metadata once so we can stamp each assistant message with
+    # the model that was actually used (including any fallback model that was saved).
+    try:
+        convo_meta = run_async(_get_conversation_meta(assistant_id, conversation_id))
+    except Exception:
+        convo_meta = {}
+    convo_model: str = (
+        convo_meta.get("model", "") if isinstance(convo_meta, dict) else ""
+    )
+    fallback_notice_map = get_fallback_notice_map(assistant_id, conversation_id)
 
     forked_snapshot = get_conversation_forked_messages(assistant_id, conversation_id)
 
@@ -80,15 +99,26 @@ def get_messages(conversation_id):
 
     if forked_snapshot:
         messages = list(forked_snapshot)
-        last_id = messages[-1]["messageId"] if messages else "00000000-0000-0000-0000-000000000000"
+        last_id = (
+            messages[-1]["messageId"]
+            if messages
+            else "00000000-0000-0000-0000-000000000000"
+        )
         for m in bb_messages:
+            bb_id = str(m.message_id)
+            persisted_notice = (
+                fallback_notice_map.get(bb_id, "")
+                if isinstance(fallback_notice_map, dict) and m.role != "user"
+                else ""
+            )
             msg = {
-                "messageId": str(m.message_id),
+                "messageId": bb_id,
                 "conversationId": conversation_id,
                 "parentMessageId": last_id,
-                "text": m.content or "",
+                "text": f"{persisted_notice}{m.content or ''}",
                 "sender": "User" if m.role == "user" else "Nash",
                 "isCreatedByUser": m.role == "user",
+                "model": convo_model if m.role != "user" else None,
                 "endpoint": "agents",
                 "createdAt": m.created_at.isoformat() if m.created_at else "",
                 "updatedAt": m.created_at.isoformat() if m.created_at else "",
@@ -105,18 +135,26 @@ def get_messages(conversation_id):
         bb_id = str(m.message_id)
         if regen_graph.get(bb_id) == "SKIP":
             continue
-        messages.append({
-            "messageId": bb_id,
-            "conversationId": conversation_id,
-            "parentMessageId": "00000000-0000-0000-0000-000000000000",
-            "text": m.content or "",
-            "sender": "User" if m.role == "user" else "Nash",
-            "isCreatedByUser": m.role == "user",
-            "endpoint": "agents",
-            "createdAt": m.created_at.isoformat() if m.created_at else "",
-            "updatedAt": m.created_at.isoformat() if m.created_at else "",
-            "error": False,
-        })
+        persisted_notice = (
+            fallback_notice_map.get(bb_id, "")
+            if isinstance(fallback_notice_map, dict) and m.role != "user"
+            else ""
+        )
+        messages.append(
+            {
+                "messageId": bb_id,
+                "conversationId": conversation_id,
+                "parentMessageId": "00000000-0000-0000-0000-000000000000",
+                "text": f"{persisted_notice}{m.content or ''}",
+                "sender": "User" if m.role == "user" else "Nash",
+                "isCreatedByUser": m.role == "user",
+                "model": convo_model if m.role != "user" else None,
+                "endpoint": "agents",
+                "createdAt": m.created_at.isoformat() if m.created_at else "",
+                "updatedAt": m.created_at.isoformat() if m.created_at else "",
+                "error": False,
+            }
+        )
 
     # Build linear parent chain first
     if len(messages) >= 2:
@@ -151,7 +189,9 @@ def delete_message(conversation_id, message_id):
     return jsonify({"message": "Deleted"})
 
 
-@messages_bp.route("/api/messages/<conversation_id>/<message_id>/feedback", methods=["POST"])
+@messages_bp.route(
+    "/api/messages/<conversation_id>/<message_id>/feedback", methods=["POST"]
+)
 @require_jwt
 def message_feedback(conversation_id, message_id):
     return jsonify({"message": "ok"})

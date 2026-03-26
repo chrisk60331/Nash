@@ -4,32 +4,45 @@ Implements the resumable SSE pattern the frontend expects:
   POST /api/agents/chat      -> start stream, return {streamId, conversationId}
   GET  /api/agents/chat/stream/:streamId -> SSE event stream
 """
-import uuid
-import json
-import queue
-import time
-import os
-import asyncio
-import logging
 
-from flask import Blueprint, request, jsonify, g, Response
+import asyncio
+import json
+import logging
+import os
+import queue
+import tempfile
+import time
+import uuid
 
 from backboard import DocumentStatus
 from backboard.exceptions import BackboardAPIError, BackboardValidationError
+from flask import Blueprint, Response, g, jsonify, request
+
+from api.config import settings
 from api.middleware.jwt_auth import require_jwt
-from api.services.backboard_service import get_client, stream_message_proxy_compatible, run_with_tool_loop, get_thread_messages
-from api.services.async_runner import run_async, iter_async
-from api.services.user_service import get_user_assistant_id, get_user_config_assistant_id, find_user_by_id
+from api.routes.billing import get_user_plan
+from api.routes.config_routes import FREE_TIER_PROVIDERS
+from api.services.async_runner import iter_async, run_async
+from api.services.backboard_service import (
+    get_client,
+    get_thread_messages,
+    run_with_tool_loop,
+    stream_message_proxy_compatible,
+)
 from api.services.conversation_service import (
+    _get_conversation_meta,
+    _save_conversation_meta,
     get_or_create_thread,
     save_conversation_meta,
-    _save_conversation_meta,
-    _get_conversation_meta,
+    save_fallback_notice,
     save_regen_graph,
 )
 from api.services.token_service import check_token_limit, record_token_usage
-from api.routes.billing import get_user_plan
-from api.routes.config_routes import FREE_TIER_PROVIDERS
+from api.services.user_service import (
+    find_user_by_id,
+    get_user_assistant_id,
+    get_user_config_assistant_id,
+)
 
 chat_bp = Blueprint("chat", __name__)
 logger = logging.getLogger(__name__)
@@ -38,14 +51,56 @@ _streams: dict[str, dict] = {}
 FILE_META_TYPE = "file_meta"
 FILE_POLL_INTERVAL_SEC = 2
 FILE_POLL_MAX_ATTEMPTS = 150  # ~5 minutes per file if no phase limit
-FILE_PROCESSING_PHASE_TIMEOUT_SEC = 90  # stop waiting on docs after this, proceed to reply
+FILE_PROCESSING_PHASE_TIMEOUT_SEC = (
+    90  # stop waiting on docs after this, proceed to reply
+)
 FILE_UPLOAD_TIMEOUT_SEC = 90  # max wait for Backboard upload_document_to_assistant
 STREAM_IDLE_TIMEOUT_SEC = 45
 STREAM_TOTAL_TIMEOUT_SEC = 180
+LONG_MESSAGE_CHAR_THRESHOLD = settings.long_message_char_threshold
+
+FALLBACK_MODEL_PAID = "openai/gpt-4.1"
+FALLBACK_MODEL_FREE = "openrouter/openrouter/free"
+
+_MODEL_FRIENDLY_NAMES: dict[str, str] = {
+    "openai/gpt-4.1": "GPT-4.1",
+    "openrouter/openrouter/free": "a free model",
+    "openai/gpt-4o": "GPT-4o",
+    "openai/gpt-4o-mini": "GPT-4o mini",
+    "openai/o1": "o1",
+    "openai/o3-mini": "o3 mini",
+    "anthropic/claude-opus-4-5": "Claude Opus 4.5",
+    "anthropic/claude-sonnet-4-5": "Claude Sonnet 4.5",
+    "anthropic/claude-haiku-3-5": "Claude Haiku 3.5",
+    "cohere/command-a-reasoning-08-2025": "Cohere Command A",
+    "cohere/command-r-plus": "Cohere Command R+",
+    "cohere/command-r": "Cohere Command R",
+    "meta/llama-3.3-70b-instruct": "Llama 3.3 70B",
+    "google/gemini-2.0-flash": "Gemini 2.0 Flash",
+    "google/gemini-1.5-pro": "Gemini 1.5 Pro",
+}
+
+
+def _friendly_model_name(model: str) -> str:
+    """Return a short human-readable label for a model spec string."""
+    if not model:
+        return "The selected model"
+    return _MODEL_FRIENDLY_NAMES.get(
+        model, model.split("/")[-1].replace("-", " ").title()
+    )
+
+
+LONG_MESSAGE_STATUS_START = (
+    "Big message detected. Indexing it in Backboard so I can read it cleanly."
+)
+LONG_MESSAGE_STATUS_INDEXING = "Indexing your message..."
+LONG_MESSAGE_STATUS_DONE = "All set. Answering now."
 
 
 def _log_stream_event(stream_id: str, stage: str, **extra):
-    logger.warning("[chat][stream:%s] %s %s", stream_id, stage, json.dumps(extra, default=str))
+    logger.warning(
+        "[chat][stream:%s] %s %s", stream_id, stage, json.dumps(extra, default=str)
+    )
 
 
 def _extract_user_text(payload: dict) -> str:
@@ -58,11 +113,25 @@ def _extract_user_text(payload: dict) -> str:
     return text
 
 
+def _should_index_long_message(text: str) -> bool:
+    return bool(text) and len(text) >= LONG_MESSAGE_CHAR_THRESHOLD
+
+
+def _build_long_message_prompt(document_id: str) -> str:
+    return (
+        "The user's message was too long to send directly. "
+        f"It has been uploaded to Backboard as document {document_id}. "
+        "Read the document content and respond to the user's request."
+    )
+
+
 def _extract_requested_model(payload: dict) -> str:
     model = payload.get("model") or ""
     endpoint_option = payload.get("endpointOption", {})
     if not model and endpoint_option:
-        model = endpoint_option.get("model", "") or endpoint_option.get("modelLabel", "")
+        model = endpoint_option.get("model", "") or endpoint_option.get(
+            "modelLabel", ""
+        )
     return model
 
 
@@ -175,26 +244,46 @@ async def _process_pending_files_for_assistant(
         and f.get("filepath") in target_filepaths
     ]
     if not pending_files:
-        logger.info("[chat] file processing: no pending files for paths %s", target_filepaths)
+        logger.info(
+            "[chat] file processing: no pending files for paths %s", target_filepaths
+        )
         return
 
-    logger.info("[chat] file processing: starting, %d pending file(s), phase_timeout=%ds", len(pending_files), FILE_PROCESSING_PHASE_TIMEOUT_SEC)
+    logger.info(
+        "[chat] file processing: starting, %d pending file(s), phase_timeout=%ds",
+        len(pending_files),
+        FILE_PROCESSING_PHASE_TIMEOUT_SEC,
+    )
 
     for i, f in enumerate(pending_files, start=1):
         if phase_timed_out():
-            logger.warning("[chat] file processing: phase time limit reached, skipping remaining")
-            events_queue.put(_status_event("Document processing time limit reached. Continuing with reply."))
+            logger.warning(
+                "[chat] file processing: phase time limit reached, skipping remaining"
+            )
+            events_queue.put(
+                _status_event(
+                    "Document processing time limit reached. Continuing with reply."
+                )
+            )
             return
         filename = f.get("filename", "file")
         try:
-            events_queue.put(_status_event(f"Processing attached files ({i}/{len(pending_files)}): {filename}"))
+            events_queue.put(
+                _status_event(
+                    f"Processing attached files ({i}/{len(pending_files)}): {filename}"
+                )
+            )
 
             filepath = f.get("filepath", "")
             if not filepath or not os.path.exists(filepath):
-                logger.info("[chat] file processing: skip '%s' (no path or missing)", filename)
+                logger.info(
+                    "[chat] file processing: skip '%s' (no path or missing)", filename
+                )
                 continue
 
-            logger.warning("[chat] file processing: uploading '%s' to Backboard ...", filename)
+            logger.warning(
+                "[chat] file processing: uploading '%s' to Backboard ...", filename
+            )
             try:
                 doc = await asyncio.wait_for(
                     client.upload_document_to_assistant(
@@ -204,43 +293,98 @@ async def _process_pending_files_for_assistant(
                     timeout=FILE_UPLOAD_TIMEOUT_SEC,
                 )
             except asyncio.TimeoutError:
-                logger.warning("[chat] file processing: upload timed out after %ds for '%s'", FILE_UPLOAD_TIMEOUT_SEC, filename)
-                events_queue.put(_status_event(f"Could not process {filename} (upload timed out). Continuing without it."))
+                logger.warning(
+                    "[chat] file processing: upload timed out after %ds for '%s'",
+                    FILE_UPLOAD_TIMEOUT_SEC,
+                    filename,
+                )
+                events_queue.put(
+                    _status_event(
+                        f"Could not process {filename} (upload timed out). Continuing without it."
+                    )
+                )
                 continue
             except Exception as e:
-                logger.exception("Failed uploading pending file '%s' for assistant %s from %s", filename, assistant_id, filepath)
-                events_queue.put(_status_event(f"Could not process {filename} ({e}). Continuing without it."))
+                logger.exception(
+                    "Failed uploading pending file '%s' for assistant %s from %s",
+                    filename,
+                    assistant_id,
+                    filepath,
+                )
+                events_queue.put(
+                    _status_event(
+                        f"Could not process {filename} ({e}). Continuing without it."
+                    )
+                )
                 continue
 
-            logger.info("[chat] file processing: uploaded '%s', document_id=%s, polling for indexed ...", filename, doc.document_id)
+            logger.info(
+                "[chat] file processing: uploaded '%s', document_id=%s, polling for indexed ...",
+                filename,
+                doc.document_id,
+            )
 
             for attempt in range(FILE_POLL_MAX_ATTEMPTS):
                 if phase_timed_out():
-                    logger.warning("[chat] file processing: phase time limit during poll for '%s'", filename)
-                    events_queue.put(_status_event(f"Still processing {filename}. Continuing with reply."))
+                    logger.warning(
+                        "[chat] file processing: phase time limit during poll for '%s'",
+                        filename,
+                    )
+                    events_queue.put(
+                        _status_event(
+                            f"Still processing {filename}. Continuing with reply."
+                        )
+                    )
                     return
                 try:
                     status = await client.get_document_status(doc.document_id)
                 except BackboardAPIError as e:
-                    logger.debug("[chat] file processing: poll attempt %d for '%s' got BackboardAPIError, retrying: %s", attempt + 1, filename, e)
+                    logger.debug(
+                        "[chat] file processing: poll attempt %d for '%s' got BackboardAPIError, retrying: %s",
+                        attempt + 1,
+                        filename,
+                        e,
+                    )
                     await asyncio.sleep(FILE_POLL_INTERVAL_SEC)
                     continue
-                status_val = status.status.value if hasattr(status.status, "value") else str(status.status)
+                status_val = (
+                    status.status.value
+                    if hasattr(status.status, "value")
+                    else str(status.status)
+                )
                 if (attempt + 1) % 15 == 0 or attempt == 0:
-                    logger.info("[chat] file processing: poll attempt %d/%d for '%s': status=%s", attempt + 1, FILE_POLL_MAX_ATTEMPTS, filename, status_val)
+                    logger.info(
+                        "[chat] file processing: poll attempt %d/%d for '%s': status=%s",
+                        attempt + 1,
+                        FILE_POLL_MAX_ATTEMPTS,
+                        filename,
+                        status_val,
+                    )
                 if status_val == DocumentStatus.INDEXED.value:
                     logger.info("[chat] file processing: '%s' indexed", filename)
                     break
                 if status_val == DocumentStatus.FAILED.value:
                     msg = status.status_message or "Document processing failed"
-                    logger.warning("[chat] file processing: '%s' failed: %s", filename, msg)
-                    events_queue.put(_status_event(f"Could not process {filename} ({msg}). Continuing without it."))
+                    logger.warning(
+                        "[chat] file processing: '%s' failed: %s", filename, msg
+                    )
+                    events_queue.put(
+                        _status_event(
+                            f"Could not process {filename} ({msg}). Continuing without it."
+                        )
+                    )
                     doc = None
                     break
                 await asyncio.sleep(FILE_POLL_INTERVAL_SEC)
             else:
-                logger.warning("[chat] file processing: timed out waiting for '%s'", filename)
-                events_queue.put(_status_event(f"Could not process {filename} (timed out). Continuing without it."))
+                logger.warning(
+                    "[chat] file processing: timed out waiting for '%s'", filename
+                )
+                events_queue.put(
+                    _status_event(
+                        f"Could not process {filename} (timed out). Continuing without it."
+                    )
+                )
                 continue
 
             if doc is None:
@@ -258,15 +402,101 @@ async def _process_pending_files_for_assistant(
                         assistant_id=assistant_id,
                         memory_id=memory_id,
                         content=json.dumps(updated),
-                        metadata={"type": FILE_META_TYPE, "fileId": updated.get("file_id"), "filename": filename},
+                        metadata={
+                            "type": FILE_META_TYPE,
+                            "fileId": updated.get("file_id"),
+                            "filename": filename,
+                        },
                     )
                 except Exception:
-                    logger.exception("Failed to update file memory for '%s' (%s)", filename, memory_id)
+                    logger.exception(
+                        "Failed to update file memory for '%s' (%s)",
+                        filename,
+                        memory_id,
+                    )
         except Exception:
-            logger.exception("Unexpected error while processing pending file '%s'", filename)
-            events_queue.put(_status_event(f"Could not process {filename}. Continuing without it."))
+            logger.exception(
+                "Unexpected error while processing pending file '%s'", filename
+            )
+            events_queue.put(
+                _status_event(f"Could not process {filename}. Continuing without it.")
+            )
 
     logger.warning("[chat] file processing: done, calling add_message next")
+
+
+async def _index_long_message_for_assistant(
+    assistant_id: str,
+    content: str,
+    events_queue: queue.Queue,
+    response_message_id: str,
+    conversation_id: str,
+    user_message_id: str,
+) -> str:
+    """Upload a long message as a document and wait for it to index."""
+
+    def _status_event(text: str) -> dict:
+        return {
+            "type": "text",
+            "text": {"value": text},
+            "index": 0,
+            "messageId": response_message_id,
+            "conversationId": conversation_id,
+            "userMessageId": user_message_id,
+            "stream": True,
+        }
+
+    client = get_client()
+    events_queue.put(_status_event(LONG_MESSAGE_STATUS_START))
+
+    filepath = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as handle:
+            handle.write(content)
+            filepath = handle.name
+
+        events_queue.put(_status_event(LONG_MESSAGE_STATUS_INDEXING))
+        doc = await asyncio.wait_for(
+            client.upload_document_to_assistant(
+                assistant_id=assistant_id,
+                file_path=filepath,
+            ),
+            timeout=FILE_UPLOAD_TIMEOUT_SEC,
+        )
+    finally:
+        if filepath:
+            try:
+                os.unlink(filepath)
+            except Exception:
+                logger.exception(
+                    "[chat] long message: failed to remove temp file %s", filepath
+                )
+
+    for attempt in range(FILE_POLL_MAX_ATTEMPTS):
+        status = await client.get_document_status(doc.document_id)
+        status_val = (
+            status.status.value
+            if hasattr(status.status, "value")
+            else str(status.status)
+        )
+        if (attempt + 1) % 15 == 0 or attempt == 0:
+            logger.info(
+                "[chat] long message: poll %d/%d status=%s",
+                attempt + 1,
+                FILE_POLL_MAX_ATTEMPTS,
+                status_val,
+            )
+        if status_val == DocumentStatus.INDEXED.value:
+            events_queue.put(_status_event(LONG_MESSAGE_STATUS_DONE))
+            return str(doc.document_id)
+        if status_val == DocumentStatus.FAILED.value:
+            msg = status.status_message or "Document processing failed"
+            raise RuntimeError(msg)
+        await asyncio.sleep(FILE_POLL_INTERVAL_SEC)
+
+    raise RuntimeError("Timed out waiting for message indexing")
 
 
 def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
@@ -286,50 +516,86 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
 
     if isinstance(ephemeral_agent, dict) and ephemeral_agent.get("bb_assistant_id"):
         agent_bb_assistant_id = ephemeral_agent["bb_assistant_id"]
-        logger.warning("[chat] using ephemeral agent bb_assistant_id=%s, agent=%s", agent_bb_assistant_id, ephemeral_agent.get("name", ""))
+        logger.warning(
+            "[chat] using ephemeral agent bb_assistant_id=%s, agent=%s",
+            agent_bb_assistant_id,
+            ephemeral_agent.get("name", ""),
+        )
     elif agent_id and agent_id.startswith("agent_"):
         try:
-            agent_bb_assistant_id = run_async(_get_agent_bb_assistant_id(config_assistant_id, agent_id))
+            agent_bb_assistant_id = run_async(
+                _get_agent_bb_assistant_id(config_assistant_id, agent_id)
+            )
             if agent_bb_assistant_id:
-                logger.warning("[chat] resolved agent_id=%s -> bb_assistant_id=%s", agent_id, agent_bb_assistant_id)
+                logger.warning(
+                    "[chat] resolved agent_id=%s -> bb_assistant_id=%s",
+                    agent_id,
+                    agent_bb_assistant_id,
+                )
             else:
-                logger.warning("[chat] agent_id=%s has no bb_assistant_id, falling back to default", agent_id)
+                logger.warning(
+                    "[chat] agent_id=%s has no bb_assistant_id, falling back to default",
+                    agent_id,
+                )
         except Exception:
-            logger.exception("Failed to resolve bb_assistant_id for agent_id=%s", agent_id)
+            logger.exception(
+                "Failed to resolve bb_assistant_id for agent_id=%s", agent_id
+            )
 
     folder_id = payload.get("folderId", "") if not agent_bb_assistant_id else ""
     folder_bb_assistant_id = ""
     if not agent_bb_assistant_id and folder_id:
-            try:
-                folder_bb_assistant_id = run_async(_get_folder_bb_assistant_id(config_assistant_id, folder_id))
-                if folder_bb_assistant_id:
-                    logger.warning("[chat] resolved folder_id=%s -> bb_assistant_id=%s", folder_id, folder_bb_assistant_id)
-                else:
-                    logger.warning("[chat] folder_id=%s has no bb_assistant_id, falling back to default", folder_id)
-            except Exception:
-                logger.exception("Failed to resolve bb_assistant_id for folder_id=%s", folder_id)
+        try:
+            folder_bb_assistant_id = run_async(
+                _get_folder_bb_assistant_id(config_assistant_id, folder_id)
+            )
+            if folder_bb_assistant_id:
+                logger.warning(
+                    "[chat] resolved folder_id=%s -> bb_assistant_id=%s",
+                    folder_id,
+                    folder_bb_assistant_id,
+                )
+            else:
+                logger.warning(
+                    "[chat] folder_id=%s has no bb_assistant_id, falling back to default",
+                    folder_id,
+                )
+        except Exception:
+            logger.exception(
+                "Failed to resolve bb_assistant_id for folder_id=%s", folder_id
+            )
 
     thread_owner_id = agent_bb_assistant_id or folder_bb_assistant_id or assistant_id
-    thread_id, conversation_id, is_new = get_or_create_thread(thread_owner_id, conversation_id)
+    thread_id, conversation_id, is_new = get_or_create_thread(
+        thread_owner_id, conversation_id
+    )
 
     # For new folder conversations, eagerly write hidden conversation_meta so the
     # conversation never leaks into the main list even during the first stream.
     if is_new and folder_id and not agent_bb_assistant_id:
         try:
-            run_async(_save_conversation_meta(
-                assistant_id,
-                conversation_id,
-                {"folderId": folder_id, "hidden": True, "title": "New Chat"},
-            ))
+            run_async(
+                _save_conversation_meta(
+                    assistant_id,
+                    conversation_id,
+                    {"folderId": folder_id, "hidden": True, "title": "New Chat"},
+                )
+            )
         except Exception:
-            logger.exception("[chat] stream: failed to pre-save folder conversation meta")
+            logger.exception(
+                "[chat] stream: failed to pre-save folder conversation meta"
+            )
 
     user_text = _extract_user_text(payload)
+    model_text = user_text
+    should_index_long_message = _should_index_long_message(user_text)
     model = payload.get("model") or ""
     endpoint = payload.get("endpoint") or payload.get("endpointType") or "bedrock"
     endpoint_option = payload.get("endpointOption", {})
     if not model and endpoint_option:
-        model = endpoint_option.get("model", "") or endpoint_option.get("modelLabel", "")
+        model = endpoint_option.get("model", "") or endpoint_option.get(
+            "modelLabel", ""
+        )
 
     is_temporary_chat = bool(payload.get("isTemporary"))
     mem_toggle = (
@@ -341,10 +607,13 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
             else "Auto"
         )
     )
-    bb_memory = {"Auto": "Auto", "Readonly": "Readonly", "On": "On", "Off": "off"}.get(mem_toggle, "off")
+    bb_memory = {"Auto": "Auto", "Readonly": "Readonly", "On": "On", "Off": "off"}.get(
+        mem_toggle, "off"
+    )
     requested_web_search = (
         "Auto"
-        if isinstance(ephemeral_agent, dict) and ephemeral_agent.get("web_search") is True
+        if isinstance(ephemeral_agent, dict)
+        and ephemeral_agent.get("web_search") is True
         else None
     )
 
@@ -357,16 +626,34 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         if isinstance(f, dict) and f.get("filepath")
     }
     if requested_paths:
-        logger.info("[chat] stream: processing pending files (paths=%s)", requested_paths)
-        run_async(_process_pending_files_for_assistant(
-            assistant_id=config_assistant_id,
-            target_filepaths=requested_paths,
-            events_queue=pre_queue,
-            response_message_id=str(uuid.uuid4()),
-            conversation_id=conversation_id,
-            user_message_id=str(uuid.uuid4()),
-            chat_assistant_id=assistant_id,
-        ))
+        logger.info(
+            "[chat] stream: processing pending files (paths=%s)", requested_paths
+        )
+        run_async(
+            _process_pending_files_for_assistant(
+                assistant_id=config_assistant_id,
+                target_filepaths=requested_paths,
+                events_queue=pre_queue,
+                response_message_id=str(uuid.uuid4()),
+                conversation_id=conversation_id,
+                user_message_id=str(uuid.uuid4()),
+                chat_assistant_id=assistant_id,
+            )
+        )
+
+    # Resolve fallback model by plan (opt-out, not opt-in).
+    # Free tier falls back to a free OpenRouter model; paid tiers fall back to GPT-4.1.
+    # Frontend sends ephemeralAgent.fallback_model = False to disable entirely.
+    user_for_fallback = find_user_by_id(user_id)
+    user_plan = get_user_plan(user_for_fallback)
+    fallback_model: str | None = (
+        FALLBACK_MODEL_PAID if user_plan != "free" else FALLBACK_MODEL_FREE
+    )
+    if (
+        isinstance(ephemeral_agent, dict)
+        and ephemeral_agent.get("fallback_model") is False
+    ):
+        fallback_model = None
 
     # Load MCP server configs if any are enabled for this conversation.
     mcp_server_map: dict = {}
@@ -374,6 +661,7 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         mcp_enabled = ephemeral_agent.get("mcp", {}) or {}
         if mcp_enabled:
             from api.routes.misc import _list_mcp_servers
+
             all_servers = run_async(_list_mcp_servers(config_assistant_id))
             for s in all_servers:
                 sname = s.get("serverName", "")
@@ -388,25 +676,32 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         "conversation_id": conversation_id,
         "folder_id": folder_id,
         "user_text": user_text,
+        "model_text": model_text,
+        "should_index_long_message": should_index_long_message,
         "model": model,
         "endpoint": endpoint,
         "bb_memory": bb_memory,
         "requested_web_search": requested_web_search,
         "pre_queue": pre_queue,
         "mcp_server_map": mcp_server_map,
+        "fallback_model": fallback_model,
     }
 
 
-def _open_backboard_stream(ctx: dict, web_search_mode: str | None):
+def _open_backboard_stream(
+    ctx: dict, web_search_mode: str | None, model_override: str | None = None
+):
     """Open the Backboard async stream and return a sync iterator via iter_async."""
+
     async def _open():
         return await stream_message_proxy_compatible(
             thread_id=ctx["thread_id"],
-            content=ctx["user_text"],
-            model=ctx["model"] or None,
+            content=ctx["model_text"],
+            model=model_override or ctx["model"] or None,
             memory=ctx["bb_memory"],
             web_search=web_search_mode,
         )
+
     async_iter = run_async(_open())
     return iter_async(async_iter, idle_timeout=STREAM_IDLE_TIMEOUT_SEC)
 
@@ -435,7 +730,9 @@ def start_chat(endpoint_name=None):
         error_message_id = str(uuid.uuid4())
         endpoint = payload.get("endpoint") or payload.get("endpointType") or "Nash"
         model = payload.get("model") or ""
-        parent_msg_id = payload.get("parentMessageId", "00000000-0000-0000-0000-000000000000")
+        parent_msg_id = payload.get(
+            "parentMessageId", "00000000-0000-0000-0000-000000000000"
+        )
 
         user_message = {
             "messageId": user_message_id,
@@ -458,7 +755,9 @@ def start_chat(endpoint_name=None):
 
         _q: queue.Queue = queue.Queue()
         _q.put({"created": True, "message": user_message})
-        _q.put({"final": True,
+        _q.put(
+            {
+                "final": True,
                 "requestMessage": user_message,
                 "responseMessage": {
                     "messageId": error_message_id,
@@ -481,7 +780,9 @@ def start_chat(endpoint_name=None):
                     "model": model,
                     "createdAt": now,
                     "updatedAt": now,
-                }})
+                },
+            }
+        )
         _streams[stream_id] = {
             "events": _q,
             "done": True,
@@ -489,21 +790,25 @@ def start_chat(endpoint_name=None):
             "userId": g.user_id,
         }
         _log_stream_event(stream_id, "limit_error_stream_created")
-        return jsonify({
-            "streamId": stream_id,
-            "conversationId": conversation_id,
-            "status": "started",
-        })
+        return jsonify(
+            {
+                "streamId": stream_id,
+                "conversationId": conversation_id,
+                "status": "started",
+            }
+        )
 
     user = find_user_by_id(g.user_id)
     plan = get_user_plan(user)
     requested_model = _extract_requested_model(payload)
     if plan == "free" and requested_model and not _is_free_tier_model(requested_model):
         return (
-            jsonify({
-                "error": "This model requires a paid plan. Select a free model or upgrade in Settings -> Billing.",
-                "code": "premium_model_requires_upgrade",
-            }),
+            jsonify(
+                {
+                    "error": "This model requires a paid plan. Select a free model or upgrade in Settings -> Billing.",
+                    "code": "premium_model_requires_upgrade",
+                }
+            ),
             403,
         )
 
@@ -516,11 +821,13 @@ def start_chat(endpoint_name=None):
     }
     _log_stream_event(stream_id, "stream_created")
 
-    return jsonify({
-        "streamId": stream_id,
-        "conversationId": conversation_id,
-        "status": "started",
-    })
+    return jsonify(
+        {
+            "streamId": stream_id,
+            "conversationId": conversation_id,
+            "status": "started",
+        }
+    )
 
 
 @chat_bp.route("/api/agents/chat/stream/<stream_id>", methods=["GET"])
@@ -532,8 +839,10 @@ def stream_chat(stream_id):
 
     if not stream_state:
         if is_resume:
+
             def completed():
                 yield f"data: {json.dumps({'final': True, 'completed': True})}\n\n"
+
             return Response(
                 completed(),
                 mimetype="text/event-stream",
@@ -547,12 +856,14 @@ def stream_chat(stream_id):
 
     # Token-limit streams already have a pre-filled queue; drain it directly.
     if stream_state.get("done") and "events" in stream_state:
+
         def drain_queue():
             q: queue.Queue = stream_state["events"]
             while not q.empty():
                 event = q.get_nowait()
                 yield f"data: {json.dumps(event)}\n\n"
             _streams.pop(stream_id, None)
+
         return Response(
             drain_queue(),
             mimetype="text/event-stream",
@@ -567,8 +878,10 @@ def stream_chat(stream_id):
     # a resume connection must not re-run the pipeline.
     if stream_state.get("generating"):
         _log_stream_event(stream_id, "resume_already_generating", isResume=is_resume)
+
         def already_done():
             yield f"data: {json.dumps({'final': True, 'completed': True})}\n\n"
+
         return Response(
             already_done(),
             mimetype="text/event-stream",
@@ -592,12 +905,16 @@ def stream_chat(stream_id):
         full_text = ""
         total_tokens = 0
         conversation_id = stream_state.get("conversationId", "")
+        fallback_succeeded = False
+        persisted_fallback_prefix = ""
 
         try:
             ctx = _prepare_stream(stream_id, user_id, payload)
-        except Exception as e:
-            logger.exception("[chat] stream: prepare failed for stream_id=%s", stream_id)
-            yield f"data: {json.dumps({'final': True, 'conversation': {'conversationId': conversation_id}, 'requestMessage': None, 'responseMessage': {'text': f'Error: {e}', 'error': True}})}\n\n"
+        except Exception:
+            logger.exception(
+                "[chat] stream: prepare failed for stream_id=%s", stream_id
+            )
+            yield f"data: {json.dumps({'final': True, 'conversation': {'conversationId': conversation_id}, 'requestMessage': None, 'responseMessage': {'text': 'I ran into an error starting your response. Please try again.', 'error': True}})}\n\n"
             _streams.pop(stream_id, None)
             return
 
@@ -610,7 +927,9 @@ def stream_chat(stream_id):
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         user_message_id = str(uuid.uuid4())
         response_message_id = str(uuid.uuid4())
-        parent_message_id = payload.get("parentMessageId", "00000000-0000-0000-0000-000000000000")
+        parent_message_id = payload.get(
+            "parentMessageId", "00000000-0000-0000-0000-000000000000"
+        )
         override_parent_message_id = payload.get("overrideParentMessageId")
         is_regenerate = payload.get("isRegenerate", False)
 
@@ -627,7 +946,28 @@ def stream_chat(stream_id):
 
         yield f"data: {json.dumps({'created': True, 'message': user_message, 'responseMessageId': response_message_id})}\n\n"
 
-        # Drain any file-processing status events first.
+        # Index long messages before streaming (and before draining status events).
+        if ctx.get("should_index_long_message"):
+            try:
+                doc_id = run_async(
+                    _index_long_message_for_assistant(
+                        assistant_id=ctx["assistant_id"],
+                        content=ctx["user_text"],
+                        events_queue=ctx["pre_queue"],
+                        response_message_id=response_message_id,
+                        conversation_id=conversation_id,
+                        user_message_id=user_message_id,
+                    )
+                )
+                ctx["model_text"] = _build_long_message_prompt(doc_id)
+            except Exception as e:
+                logger.exception(
+                    "[chat] long message: indexing failed for conversation %s",
+                    conversation_id,
+                )
+                full_text = f"Sorry, I could not index that long message. {e}"
+
+        # Drain any file-processing or long-message status events first.
         pre_q: queue.Queue = ctx["pre_queue"]
         while not pre_q.empty():
             yield f"data: {json.dumps(pre_q.get_nowait())}\n\n"
@@ -636,33 +976,51 @@ def stream_chat(stream_id):
 
         logger.warning(
             "[chat] stream: opening Backboard stream (thread_id=%s, model=%r, memory=%s, web_search=%r, mcp_servers=%s)",
-            thread_id, model, ctx["bb_memory"], ctx["requested_web_search"], list(mcp_server_map.keys()),
+            thread_id,
+            model,
+            ctx["bb_memory"],
+            ctx["requested_web_search"],
+            list(mcp_server_map.keys()),
         )
 
-        if mcp_server_map:
+        if full_text:
+            total_tokens = (len(ctx["model_text"]) + len(full_text)) // 4 + 1
+        elif mcp_server_map:
             # MCP path: use non-streaming tool loop, then fake-stream the result
             try:
-                final_answer = run_async(run_with_tool_loop(
-                    assistant_id=ctx["assistant_id"],
-                    thread_id=thread_id,
-                    content=ctx["user_text"],
-                    mcp_server_map=mcp_server_map,
-                ), timeout=120)
+                final_answer = run_async(
+                    run_with_tool_loop(
+                        assistant_id=ctx["assistant_id"],
+                        thread_id=thread_id,
+                        content=ctx["model_text"],
+                        mcp_server_map=mcp_server_map,
+                    ),
+                    timeout=120,
+                )
                 full_text = final_answer or ""
                 total_tokens = (len(ctx["user_text"]) + len(full_text)) // 4 + 1
                 # Emit a single streaming chunk so the UI renders progressively
                 yield f"data: {json.dumps({'type': 'text', 'text': {'value': full_text}, 'index': 0, 'messageId': response_message_id, 'conversationId': conversation_id, 'userMessageId': user_message_id, 'thread_id': thread_id, 'stream': True})}\n\n"
             except Exception as e:
-                logger.exception("[chat] stream: MCP tool loop failed for conversation %s", conversation_id)
+                logger.exception(
+                    "[chat] stream: MCP tool loop failed for conversation %s",
+                    conversation_id,
+                )
                 full_text = f"[Error: {e}]"
         else:
-            def _consume(web_search_mode):
+
+            def _consume(web_search_mode, model_override: str | None = None):
                 nonlocal full_text, total_tokens
                 stream_started = time.monotonic()
                 chunk_count = 0
-                for chunk in _open_backboard_stream(ctx, web_search_mode):
+                for chunk in _open_backboard_stream(
+                    ctx, web_search_mode, model_override=model_override
+                ):
                     if time.monotonic() - stream_started >= STREAM_TOTAL_TIMEOUT_SEC:
-                        logger.warning("[chat] stream: total timeout after %ss", STREAM_TOTAL_TIMEOUT_SEC)
+                        logger.warning(
+                            "[chat] stream: total timeout after %ss",
+                            STREAM_TOTAL_TIMEOUT_SEC,
+                        )
                         full_text += "\n\n[Error: response timed out]"
                         return
                     chunk_type = chunk.get("type", "")
@@ -671,7 +1029,11 @@ def stream_chat(stream_id):
                         full_text += content
                         chunk_count += 1
                         if chunk_count <= 3:
-                            logger.warning("[chat] stream: chunk %d len=%d", chunk_count, len(content))
+                            logger.warning(
+                                "[chat] stream: chunk %d len=%d",
+                                chunk_count,
+                                len(content),
+                            )
                         yield {
                             "type": "text",
                             "text": {"value": full_text},
@@ -684,10 +1046,16 @@ def stream_chat(stream_id):
                         }
                     elif chunk_type in ("run_ended", "run_completed"):
                         total_tokens = int(chunk.get("total_tokens", 0) or 0)
-                        logger.warning("[chat] stream: %s, total_tokens=%d", chunk_type, total_tokens)
+                        logger.warning(
+                            "[chat] stream: %s, total_tokens=%d",
+                            chunk_type,
+                            total_tokens,
+                        )
                         return
                     elif chunk_type in ("error", "run_failed"):
-                        error_msg = chunk.get("error") or chunk.get("message", "Unknown error")
+                        error_msg = chunk.get("error") or chunk.get(
+                            "message", "Unknown error"
+                        )
                         raise BackboardAPIError(error_msg)
 
             try:
@@ -695,16 +1063,67 @@ def stream_chat(stream_id):
                     for event in _consume(ctx["requested_web_search"]):
                         yield f"data: {json.dumps(event)}\n\n"
                 except BackboardAPIError as e:
-                    if ctx["requested_web_search"] and not full_text and _is_tool_use_error(str(e)):
-                        logger.warning("[chat] stream: retrying without web_search (model=%r)", model)
+                    if (
+                        ctx["requested_web_search"]
+                        and not full_text
+                        and _is_tool_use_error(str(e))
+                    ):
+                        logger.warning(
+                            "[chat] stream: retrying without web_search (model=%r)",
+                            model,
+                        )
                         for event in _consume(None):
                             yield f"data: {json.dumps(event)}\n\n"
+                    elif (
+                        ctx.get("fallback_model")
+                        and ctx["model"] != ctx["fallback_model"]
+                    ):
+                        # Primary model failed — attempt tier-appropriate fallback.
+                        original_model = ctx["model"]
+                        chosen_fallback: str = ctx["fallback_model"]
+                        logger.warning(
+                            "[chat] stream: primary model %r failed (%s), falling back to %s",
+                            original_model,
+                            e,
+                            chosen_fallback,
+                        )
+                        fallback_prefix = (
+                            f"*{_friendly_model_name(original_model)} wasn't available, "
+                            f"so I used {_friendly_model_name(chosen_fallback)} instead.*\n\n"
+                        )
+                        persisted_fallback_prefix = fallback_prefix
+                        full_text = ""
+                        try:
+                            for event in _consume(None, model_override=chosen_fallback):
+                                # Prepend the notice to every streamed chunk so the UI
+                                # always shows the full text including the header.
+                                event_with_prefix = dict(event)
+                                event_with_prefix["text"] = {
+                                    "value": fallback_prefix + full_text
+                                }
+                                yield f"data: {json.dumps(event_with_prefix)}\n\n"
+                            # full_text was accumulated by _consume; prepend the notice.
+                            full_text = fallback_prefix + full_text
+                            model = chosen_fallback
+                            ctx["model"] = chosen_fallback
+                            fallback_succeeded = True
+                        except Exception:
+                            logger.exception(
+                                "[chat] stream: fallback model %s also failed for conversation %s",
+                                chosen_fallback,
+                                conversation_id,
+                            )
+                            full_text = "I ran into an error generating a response and the fallback model also failed. Please try again."
                     else:
-                        logger.warning("[chat] stream: Backboard API error=%s", e)
-                        full_text += f"\n\n[Error: {e}]"
+                        logger.warning(
+                            "[chat] stream: Backboard API error (fallback model)=%s", e
+                        )
+                        full_text = "I ran into an error generating a response. Please try again."
             except Exception as e:
-                logger.exception("[chat] stream: failed for conversation %s", conversation_id)
-                full_text += f"\n\n[Error: {e}]"
+                logger.exception(
+                    "[chat] stream: failed for conversation %s", conversation_id
+                )
+                full_text += "\n\nI ran into an unexpected error. Please try again."
 
         if total_tokens == 0:
             total_tokens = (len(ctx["user_text"]) + len(full_text)) // 4 + 1
@@ -715,7 +1134,9 @@ def stream_chat(stream_id):
         response_message = {
             "messageId": response_message_id,
             "conversationId": conversation_id,
-            "parentMessageId": (override_parent_message_id or parent_message_id) if is_regenerate else user_message_id,
+            "parentMessageId": (override_parent_message_id or parent_message_id)
+            if is_regenerate
+            else user_message_id,
             "text": full_text,
             "sender": "Nash",
             "isCreatedByUser": False,
@@ -747,7 +1168,9 @@ def stream_chat(stream_id):
         elif len(full_text) > 60:
             title += "..."
 
-        existing_meta = run_async(_get_conversation_meta(ctx["assistant_id"], conversation_id))
+        existing_meta = run_async(
+            _get_conversation_meta(ctx["assistant_id"], conversation_id)
+        )
         existing_title = existing_meta.get("title", "")
         should_set_title = not existing_title or existing_title == "New Chat"
 
@@ -756,17 +1179,72 @@ def stream_chat(stream_id):
                 bb_msgs = run_async(get_thread_messages(thread_id))
                 # Thread ends with: [..., uN, aN, uN_regen, aN_regen]
                 # We want aN_regen to share uN as its parent (same as aN), and uN_regen to be skipped.
-                if len(bb_msgs) >= 4 and bb_msgs[-1].role == "assistant" and bb_msgs[-2].role == "user":
+                if (
+                    len(bb_msgs) >= 4
+                    and bb_msgs[-1].role == "assistant"
+                    and bb_msgs[-2].role == "user"
+                ):
                     regen_ai_id = bb_msgs[-1].message_id
                     regen_user_id = bb_msgs[-2].message_id
                     original_user_id = bb_msgs[-4].message_id
-                    save_regen_graph(ctx["assistant_id"], conversation_id, {
-                        regen_ai_id: original_user_id,
-                        regen_user_id: "SKIP",
-                    })
-                    logger.warning("[chat] regen_graph saved regen_ai=%s -> original_user=%s", regen_ai_id, original_user_id)
+                    save_regen_graph(
+                        ctx["assistant_id"],
+                        conversation_id,
+                        {
+                            regen_ai_id: original_user_id,
+                            regen_user_id: "SKIP",
+                        },
+                    )
+                    logger.warning(
+                        "[chat] regen_graph saved regen_ai=%s -> original_user=%s",
+                        regen_ai_id,
+                        original_user_id,
+                    )
             except Exception:
                 logger.exception("[chat] stream: failed to save regen graph")
+        elif fallback_succeeded:
+            try:
+                bb_msgs = run_async(get_thread_messages(thread_id))
+                # Fallback retry appends a second user/assistant pair to the same thread:
+                # [..., user_primary, assistant_error, user_fallback, assistant_fallback]
+                # Hide the failed attempt and duplicate retry user on reload, and attach the
+                # successful fallback assistant to the original user message.
+                if (
+                    len(bb_msgs) >= 4
+                    and bb_msgs[-1].role == "assistant"
+                    and bb_msgs[-2].role == "user"
+                    and bb_msgs[-3].role == "assistant"
+                    and bb_msgs[-4].role == "user"
+                ):
+                    fallback_ai_id = bb_msgs[-1].message_id
+                    fallback_user_id = bb_msgs[-2].message_id
+                    failed_ai_id = bb_msgs[-3].message_id
+                    original_user_id = bb_msgs[-4].message_id
+                    save_regen_graph(
+                        ctx["assistant_id"],
+                        conversation_id,
+                        {
+                            fallback_ai_id: original_user_id,
+                            fallback_user_id: "SKIP",
+                            failed_ai_id: "SKIP",
+                        },
+                    )
+                    save_fallback_notice(
+                        ctx["assistant_id"],
+                        conversation_id,
+                        {
+                            str(fallback_ai_id): persisted_fallback_prefix,
+                        },
+                    )
+                    logger.warning(
+                        "[chat] fallback_graph saved fallback_ai=%s -> original_user=%s, skipped failed_ai=%s and retry_user=%s",
+                        fallback_ai_id,
+                        original_user_id,
+                        failed_ai_id,
+                        fallback_user_id,
+                    )
+            except Exception:
+                logger.exception("[chat] stream: failed to save fallback graph")
 
         try:
             meta = {"endpoint": endpoint, "model": model}
@@ -774,7 +1252,9 @@ def stream_chat(stream_id):
                 meta["title"] = title
             if ctx.get("folder_id"):
                 meta["folderId"] = ctx["folder_id"]
-            run_async(_save_conversation_meta(ctx["assistant_id"], conversation_id, meta))
+            run_async(
+                _save_conversation_meta(ctx["assistant_id"], conversation_id, meta)
+            )
         except Exception:
             logger.exception("[chat] stream: failed to save conversation meta")
 
@@ -782,7 +1262,12 @@ def stream_chat(stream_id):
         # status endpoint returns active=false before the client's
         # useResumeOnLoad can fire.
         _streams.pop(stream_id, None)
-        _log_stream_event(stream_id, "stream_complete", totalTokens=total_tokens, responseLength=len(full_text))
+        _log_stream_event(
+            stream_id,
+            "stream_complete",
+            totalTokens=total_tokens,
+            responseLength=len(full_text),
+        )
 
         yield f"data: {json.dumps(final_event)}\n\n"
 
@@ -801,7 +1286,8 @@ def stream_chat(stream_id):
 @require_jwt
 def active_jobs():
     active_ids = [
-        sid for sid, s in _streams.items()
+        sid
+        for sid, s in _streams.items()
         if s.get("userId") == g.user_id and not s.get("done") and s.get("generating")
     ]
     logger.warning("[chat] active_jobs user_id=%s active_ids=%s", g.user_id, active_ids)
@@ -813,7 +1299,9 @@ def active_jobs():
 def chat_status(conversation_id):
     for sid, s in _streams.items():
         if s.get("conversationId") == conversation_id and not s.get("done"):
-            _log_stream_event(sid, "status_active_hit", requestedConversationId=conversation_id)
+            _log_stream_event(
+                sid, "status_active_hit", requestedConversationId=conversation_id
+            )
             return jsonify({"active": True, "streamId": sid})
     logger.warning("[chat] status_inactive requestedConversationId=%s", conversation_id)
     return jsonify({"active": False})

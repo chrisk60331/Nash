@@ -54,5 +54,6 @@ class Settings(BaseSettings):
     gmail_app_password: str = ""
     gmail_user: str = ""
     alert_recipient_email: str = ""
+    long_message_char_threshold: int = 30_000
 
 settings = Settings()

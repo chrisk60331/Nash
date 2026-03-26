@@ -1,9 +1,10 @@
 """Conversation/thread management backed by Backboard."""
+
 import json
 from datetime import datetime, timezone
 
-from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
+from api.services.backboard_service import get_client
 
 THREAD_MAP_TYPE = "thread_mapping"
 
@@ -27,7 +28,9 @@ async def _load_thread_mappings(assistant_id: str) -> None:
     _loaded_assistants.add(assistant_id)
 
 
-async def _get_or_create_thread(assistant_id: str, conversation_id: str | None = None) -> tuple[str, str, bool]:
+async def _get_or_create_thread(
+    assistant_id: str, conversation_id: str | None = None
+) -> tuple[str, str, bool]:
     """Returns (thread_id, conversation_id, is_new)."""
     await _load_thread_mappings(assistant_id)
     client = get_client()
@@ -57,11 +60,15 @@ async def _get_or_create_thread(assistant_id: str, conversation_id: str | None =
     return thread_id, conversation_id, True
 
 
-def get_or_create_thread(assistant_id: str, conversation_id: str | None = None) -> tuple[str, str, bool]:
+def get_or_create_thread(
+    assistant_id: str, conversation_id: str | None = None
+) -> tuple[str, str, bool]:
     return run_async(_get_or_create_thread(assistant_id, conversation_id))
 
 
-def get_thread_id_for_conversation(conversation_id: str, assistant_id: str | None = None) -> str | None:
+def get_thread_id_for_conversation(
+    conversation_id: str, assistant_id: str | None = None
+) -> str | None:
     if assistant_id and assistant_id not in _loaded_assistants:
         run_async(_load_thread_mappings(assistant_id))
     return _thread_map.get(conversation_id)
@@ -70,12 +77,17 @@ def get_thread_id_for_conversation(conversation_id: str, assistant_id: str | Non
 CONVO_META_TYPE = "conversation_meta"
 
 
-async def _save_conversation_meta(assistant_id: str, conversation_id: str, meta: dict) -> None:
+async def _save_conversation_meta(
+    assistant_id: str, conversation_id: str, meta: dict
+) -> None:
     client = get_client()
     existing = await client.get_memories(assistant_id)
     for m in existing.memories:
         mm = m.metadata or {}
-        if mm.get("type") == CONVO_META_TYPE and mm.get("conversationId") == conversation_id:
+        if (
+            mm.get("type") == CONVO_META_TYPE
+            and mm.get("conversationId") == conversation_id
+        ):
             try:
                 existing_meta = json.loads(m.content)
             except json.JSONDecodeError:
@@ -85,7 +97,10 @@ async def _save_conversation_meta(assistant_id: str, conversation_id: str, meta:
                 assistant_id=assistant_id,
                 memory_id=m.id,
                 content=json.dumps(merged),
-                metadata={**mm, **{"updatedAt": datetime.now(timezone.utc).isoformat()}},
+                metadata={
+                    **mm,
+                    **{"updatedAt": datetime.now(timezone.utc).isoformat()},
+                },
             )
             return
 
@@ -110,7 +125,10 @@ async def _get_conversation_meta(assistant_id: str, conversation_id: str) -> dic
     existing = await client.get_memories(assistant_id)
     for m in existing.memories:
         mm = m.metadata or {}
-        if mm.get("type") == CONVO_META_TYPE and mm.get("conversationId") == conversation_id:
+        if (
+            mm.get("type") == CONVO_META_TYPE
+            and mm.get("conversationId") == conversation_id
+        ):
             try:
                 return json.loads(m.content)
             except json.JSONDecodeError:
@@ -152,7 +170,10 @@ async def _delete_conversation_meta(assistant_id: str, conversation_id: str) -> 
     response = await client.get_memories(assistant_id)
     for m in response.memories:
         meta = m.metadata or {}
-        if meta.get("type") == CONVO_META_TYPE and meta.get("conversationId") == conversation_id:
+        if (
+            meta.get("type") == CONVO_META_TYPE
+            and meta.get("conversationId") == conversation_id
+        ):
             await client.delete_memory(assistant_id=assistant_id, memory_id=m.id)
             return True
     return False
@@ -185,7 +206,9 @@ def list_folder_conversation_ids(folder_bb_assistant_id: str) -> list[dict]:
     return run_async(_list_folder_conversation_ids(folder_bb_assistant_id))
 
 
-async def _add_thread_mapping(assistant_id: str, conversation_id: str, thread_id: str) -> None:
+async def _add_thread_mapping(
+    assistant_id: str, conversation_id: str, thread_id: str
+) -> None:
     """Write a thread_mapping memory on the given assistant and update the in-process cache."""
     client = get_client()
     _thread_map[conversation_id] = thread_id
@@ -210,7 +233,10 @@ async def _remove_thread_mapping(assistant_id: str, conversation_id: str) -> boo
     response = await client.get_memories(assistant_id)
     for m in response.memories:
         meta = m.metadata or {}
-        if meta.get("type") == THREAD_MAP_TYPE and meta.get("conversationId") == conversation_id:
+        if (
+            meta.get("type") == THREAD_MAP_TYPE
+            and meta.get("conversationId") == conversation_id
+        ):
             await client.delete_memory(assistant_id=assistant_id, memory_id=m.id)
             return True
     return False
@@ -220,7 +246,9 @@ def remove_thread_mapping(assistant_id: str, conversation_id: str) -> bool:
     return run_async(_remove_thread_mapping(assistant_id, conversation_id))
 
 
-def get_conversation_forked_messages(assistant_id: str, conversation_id: str) -> list | None:
+def get_conversation_forked_messages(
+    assistant_id: str, conversation_id: str
+) -> list | None:
     """Return the forked message snapshot for a conversation, or None if not a fork."""
     convos = list_conversations(assistant_id)
     for c in convos:
@@ -230,9 +258,12 @@ def get_conversation_forked_messages(assistant_id: str, conversation_id: str) ->
 
 
 REGEN_GRAPH_TYPE = "regen_graph"
+FALLBACK_NOTICE_TYPE = "fallback_notice"
 
 
-async def _save_regen_graph(assistant_id: str, conversation_id: str, updates: dict) -> None:
+async def _save_regen_graph(
+    assistant_id: str, conversation_id: str, updates: dict
+) -> None:
     """Merge updates into the regen graph memory for this conversation.
 
     updates maps Backboard message_id -> parent Backboard message_id (or "SKIP").
@@ -241,7 +272,10 @@ async def _save_regen_graph(assistant_id: str, conversation_id: str, updates: di
     existing = await client.get_memories(assistant_id)
     for m in existing.memories:
         meta = m.metadata or {}
-        if meta.get("type") == REGEN_GRAPH_TYPE and meta.get("conversationId") == conversation_id:
+        if (
+            meta.get("type") == REGEN_GRAPH_TYPE
+            and meta.get("conversationId") == conversation_id
+        ):
             try:
                 graph = json.loads(m.content)
             except json.JSONDecodeError:
@@ -274,7 +308,10 @@ async def _get_regen_graph(assistant_id: str, conversation_id: str) -> dict:
     existing = await client.get_memories(assistant_id)
     for m in existing.memories:
         meta = m.metadata or {}
-        if meta.get("type") == REGEN_GRAPH_TYPE and meta.get("conversationId") == conversation_id:
+        if (
+            meta.get("type") == REGEN_GRAPH_TYPE
+            and meta.get("conversationId") == conversation_id
+        ):
             try:
                 return json.loads(m.content)
             except json.JSONDecodeError:
@@ -284,3 +321,67 @@ async def _get_regen_graph(assistant_id: str, conversation_id: str) -> dict:
 
 def get_regen_graph(assistant_id: str, conversation_id: str) -> dict:
     return run_async(_get_regen_graph(assistant_id, conversation_id))
+
+
+async def _save_fallback_notice(
+    assistant_id: str, conversation_id: str, updates: dict
+) -> None:
+    """Merge fallback notice text for assistant messages in a conversation.
+
+    updates maps Backboard assistant message_id -> persisted notice prefix text.
+    """
+    client = get_client()
+    existing = await client.get_memories(assistant_id)
+    for m in existing.memories:
+        meta = m.metadata or {}
+        if (
+            meta.get("type") == FALLBACK_NOTICE_TYPE
+            and meta.get("conversationId") == conversation_id
+        ):
+            try:
+                notices = json.loads(m.content)
+            except json.JSONDecodeError:
+                notices = {}
+            notices.update(updates)
+            await client.update_memory(
+                assistant_id=assistant_id,
+                memory_id=m.id,
+                content=json.dumps(notices),
+                metadata=meta,
+            )
+            return
+    await client.add_memory(
+        assistant_id=assistant_id,
+        content=json.dumps(updates),
+        metadata={
+            "type": FALLBACK_NOTICE_TYPE,
+            "conversationId": conversation_id,
+        },
+    )
+
+
+def save_fallback_notice(
+    assistant_id: str, conversation_id: str, updates: dict
+) -> None:
+    run_async(_save_fallback_notice(assistant_id, conversation_id, updates))
+
+
+async def _get_fallback_notice_map(assistant_id: str, conversation_id: str) -> dict:
+    """Return persisted fallback notice text for a conversation (empty dict if none)."""
+    client = get_client()
+    existing = await client.get_memories(assistant_id)
+    for m in existing.memories:
+        meta = m.metadata or {}
+        if (
+            meta.get("type") == FALLBACK_NOTICE_TYPE
+            and meta.get("conversationId") == conversation_id
+        ):
+            try:
+                return json.loads(m.content)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+
+def get_fallback_notice_map(assistant_id: str, conversation_id: str) -> dict:
+    return run_async(_get_fallback_notice_map(assistant_id, conversation_id))

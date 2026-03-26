@@ -9,6 +9,7 @@ import {
   useRef,
   startTransition,
 } from 'react';
+import { Constants } from 'librechat-data-provider';
 import { useRecoilValue } from 'recoil';
 import { matchSorter } from 'match-sorter';
 import { motion } from 'framer-motion';
@@ -286,6 +287,9 @@ const Nav = memo(
           <Suspense fallback={<Skeleton className="mt-1 h-12 w-full rounded-xl" />}>
             <AccountSettings onNavigate={isSmallScreen ? closeNav : undefined} />
           </Suspense>
+          <div className="px-2 pb-1 pt-0.5 text-center text-[10px] text-text-secondary/50">
+            Nash {String(Constants.VERSION)}
+          </div>
         </nav>
       </div>
     );

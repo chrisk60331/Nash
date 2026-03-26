@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Long message handling:** Extra-long user messages are now uploaded and indexed as Backboard documents before responding, with inline status updates during indexing.\n- **Fallback model:** On model failure, we now fall back to tier-appropriate models (paid → GPT‑4.1, free → OpenRouter free) and persist a clear fallback notice.\n- **Chat UI polish:** GitHub/referral badges moved into the right config drawer, version label moved under the left drawer user card, footer scrolling quotes removed, and badge toggles are now uniform height.",
+        "publishedAt": "2026-03-26T00:00:00Z",
+        "tagName": "v2.15.0",
+        "title": "v2.15.0"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Chrome `/` prompt selector:** Fixed click and keyboard selection in Chrome. Group is resolved at render time (avoiding stale closure), panel-level `onMouseDown` prevents blur-before-click, blur timeout extended to 500ms so virtualized rows are not unmounted before the click fires. Autofill noise from unnamed inputs also silenced.",
         "publishedAt": "2026-03-20T00:00:00Z",
         "tagName": "v2.14.39",

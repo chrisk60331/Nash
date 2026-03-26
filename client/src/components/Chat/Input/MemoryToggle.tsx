@@ -78,7 +78,7 @@ function MemoryToggle() {
         type="button"
         onClick={handleClick}
         className={cn(
-          'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+          'flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors',
           isLocked && 'cursor-pointer border-border-light bg-transparent text-text-tertiary hover:bg-surface-hover',
           !isLocked && mode === 'Auto' && 'border-purple-600/40 bg-purple-500/10 text-purple-700 hover:bg-purple-700/10 dark:text-purple-300',
           !isLocked && mode === 'Readonly' && 'border-border-medium bg-surface-secondary text-text-secondary hover:bg-surface-hover',

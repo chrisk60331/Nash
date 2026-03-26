@@ -6,18 +6,17 @@ import { Constants } from 'librechat-data-provider';
 import { useGetStartupConfig } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import ReleaseNotesModal from './ReleaseNotesModal';
-import SlotMachineText from './SlotMachineText';
 
 export default function Footer({ className }: { className?: string }) {
   const { data: config } = useGetStartupConfig();
   const localize = useLocalize();
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
 
-  const privacyPolicyRender = (
-    <Link className="text-text-secondary underline" to="/privacy">
-      {localize('com_ui_privacy_policy')}
-    </Link>
-  );
+  // const privacyPolicyRender = (
+  //   <Link className="text-text-secondary underline" to="/privacy">
+  //     {localize('com_ui_privacy_policy')}
+  //   </Link>
+  // );
 
   const termsOfServiceRender = (
     <Link className="text-text-secondary underline" to="/terms">
@@ -62,18 +61,7 @@ export default function Footer({ className }: { className?: string }) {
           </ReactMarkdown>
         </React.Fragment>
       ))
-    : [
-        <button
-          key="release-notes-link"
-          type="button"
-          className="text-text-secondary underline"
-          onClick={() => setShowReleaseNotes(true)}
-          title={`Open release notes for ${Constants.VERSION}`}
-        >
-          {`Nash ${Constants.VERSION}`}
-        </button>,
-        <SlotMachineText key="latest-footer-copy" className="text-text-secondary" />,
-      ];
+    : [];
 
   const statusUrl =
     ((config as Record<string, unknown>)?.statusPageURL as string | undefined) ??
@@ -110,11 +98,11 @@ export default function Footer({ className }: { className?: string }) {
 
   // Legal/support links first, Nash version + scroll text rightmost
   const footerElements = [
-    privacyPolicyRender,
-    termsOfServiceRender,
-    cookiesRender,
-    statusRender,
-    supportRender,
+    // privacyPolicyRender,
+    // termsOfServiceRender,
+    // cookiesRender,
+    // statusRender,
+    // supportRender,
     ...mainContentRender,
   ].filter(Boolean);
 

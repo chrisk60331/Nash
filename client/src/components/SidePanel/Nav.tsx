@@ -8,6 +8,8 @@ import {
 } from '@librechat/client';
 import type { NavLink, NavProps } from '~/common';
 import { ActivePanelProvider, useActivePanel } from '~/Providers';
+import ReferralPanel from '~/components/Referrals/ReferralPanel';
+import GitHubBadge from '~/components/ui/GitHubBadge';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import EnterpriseUpsellCard from './EnterpriseUpsellCard';
@@ -27,6 +29,12 @@ function NavContent({ links, isCollapsed, resize }: Omit<NavProps, 'defaultActiv
           <div className="flex h-full min-h-0 flex-col opacity-100 transition-opacity">
             <div className="scrollbar-trigger relative h-full w-full flex-1 items-start border-white/20">
               <div className="flex h-full w-full flex-col gap-1 px-3 py-2.5 group-[[data-collapsed=true]]:items-center group-[[data-collapsed=true]]:justify-center group-[[data-collapsed=true]]:px-2">
+                {!isCollapsed && (
+                  <div className="mb-1 flex items-center gap-2 pb-1 border-b border-border-light">
+                    <GitHubBadge />
+                    <ReferralPanel variant="header" />
+                  </div>
+                )}
                 {links.map((link, index) => {
                   const variant = getVariant(link);
                   return isCollapsed ? (
