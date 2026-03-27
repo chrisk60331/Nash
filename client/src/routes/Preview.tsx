@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -29,6 +29,8 @@ import {
   OGDialogContent,
   OGDialogDescription,
   OGDialogTitle,
+  ThemeContext,
+  isDark,
 } from '@librechat/client';
 import { useGetStartupConfig } from '~/data-provider';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
@@ -282,20 +284,30 @@ function PreviewAuthModal({
   );
 }
 
-function LeftRail({ onOpenSignup }: { onOpenSignup: () => void }) {
+function LeftRail({
+  onOpenSignup,
+  isDarkMode,
+}: {
+  onOpenSignup: () => void;
+  isDarkMode: boolean;
+}) {
   return (
-    <aside className="hidden h-full w-[248px] shrink-0 border-r border-border-light bg-[#171717] text-white lg:flex">
+    <aside
+      className={`hidden h-full w-[248px] shrink-0 border-r border-border-light lg:flex ${
+        isDarkMode ? 'bg-[#171717] text-white' : 'bg-white text-[#171717]'
+      }`}
+    >
       <div className="relative flex h-full w-full flex-col">
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
-            <PanelLeft size={18} className="text-white/80" />
+            <PanelLeft size={18} className={isDarkMode ? 'text-white/80' : 'text-black/70'} />
             <img
-              src="assets/nash_dark.png"
+              src={isDarkMode ? 'assets/nash_dark.png' : 'assets/nash.png'}
               className="h-7 w-auto object-contain"
               alt="Nash"
             />
           </div>
-          <div className="flex items-center gap-2 text-white/75">
+          <div className={`flex items-center gap-2 ${isDarkMode ? 'text-white/75' : 'text-black/60'}`}>
             <Star size={16} />
             <Wand2 size={16} />
           </div>
@@ -304,14 +316,22 @@ function LeftRail({ onOpenSignup }: { onOpenSignup: () => void }) {
         <div className="px-3">
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/85 transition-colors hover:bg-white/5"
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+              isDarkMode
+                ? 'text-white/85 hover:bg-white/5'
+                : 'text-black/80 hover:bg-black/5'
+            }`}
           >
             <Search size={16} />
             Search messages
           </button>
           <button
             type="button"
-            className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/85 transition-colors hover:bg-white/5"
+            className={`mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+              isDarkMode
+                ? 'text-white/85 hover:bg-white/5'
+                : 'text-black/80 hover:bg-black/5'
+            }`}
           >
             <Sparkles size={16} />
             Persona Marketplace
@@ -319,7 +339,11 @@ function LeftRail({ onOpenSignup }: { onOpenSignup: () => void }) {
         </div>
 
         <div className="mt-5 px-4">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
+          <div
+            className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+              isDarkMode ? 'text-white/35' : 'text-black/35'
+            }`}
+          >
             Chats
           </div>
           <div className="space-y-1">
@@ -329,8 +353,12 @@ function LeftRail({ onOpenSignup }: { onOpenSignup: () => void }) {
                 type="button"
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
                   index === 0
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/75 hover:bg-white/5 hover:text-white'
+                    ? isDarkMode
+                      ? 'bg-white/10 text-white'
+                      : 'bg-black/8 text-[#171717]'
+                    : isDarkMode
+                      ? 'text-white/75 hover:bg-white/5 hover:text-white'
+                      : 'text-black/65 hover:bg-black/5 hover:text-black'
                 }`}
               >
                 <MessageSquareText size={16} className="shrink-0" />
@@ -359,6 +387,7 @@ function TopBar({
   onSelectOption,
   onSelectModelEntry,
   onWatchLive,
+  isDarkMode,
 }: {
   options: PreviewOption[];
   modelEntries: PreviewModelEntry[];
@@ -367,14 +396,23 @@ function TopBar({
   onSelectOption: (key: string) => void;
   onSelectModelEntry: (entry: PreviewModelEntry) => void;
   onWatchLive: () => void;
+  isDarkMode: boolean;
 }) {
   return (
-    <div className="sticky top-0 z-20 border-b border-border-light bg-[#212121]/95 px-3 py-3 backdrop-blur-sm sm:px-4">
+    <div
+      className={`sticky top-0 z-20 border-b border-border-light px-3 py-3 backdrop-blur-sm sm:px-4 ${
+        isDarkMode ? 'bg-[#212121]/95' : 'bg-white/95'
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-white">
+        <div className={`flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-[#171717]'}`}>
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-colors hover:bg-white/10 lg:hidden"
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors lg:hidden ${
+              isDarkMode
+                ? 'border border-white/10 bg-white/5 hover:bg-white/10'
+                : 'border border-black/10 bg-black/5 hover:bg-black/10'
+            }`}
           >
             <Menu size={18} />
           </button>
@@ -385,6 +423,7 @@ function TopBar({
             selectedModelEntry={selectedModelEntry}
             onSelectOption={onSelectOption}
             onSelectModelEntry={onSelectModelEntry}
+            isDarkMode={isDarkMode}
           />
         </div>
 
@@ -392,14 +431,22 @@ function TopBar({
           <button
             type="button"
             onClick={onWatchLive}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+              isDarkMode
+                ? 'border border-white/10 bg-white/5 text-white hover:bg-white/10'
+                : 'border border-black/10 bg-black/5 text-[#171717] hover:bg-black/10'
+            }`}
           >
             <Play size={14} />
             Watch it live
           </button>
           <Link
             to="/"
-            className="inline-flex items-center rounded-xl px-3 py-2 text-sm font-medium text-white/75 transition-colors hover:bg-white/5 hover:text-white"
+            className={`inline-flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+              isDarkMode
+                ? 'text-white/75 hover:bg-white/5 hover:text-white'
+                : 'text-black/65 hover:bg-black/5 hover:text-black'
+            }`}
           >
             Back home
           </Link>
@@ -409,28 +456,56 @@ function TopBar({
   );
 }
 
-function RightPanel({ onOpenSignup }: { onOpenSignup: () => void }) {
+function RightPanel({
+  onOpenSignup,
+  isDarkMode,
+}: {
+  onOpenSignup: () => void;
+  isDarkMode: boolean;
+}) {
   const [memoryExpanded, setMemoryExpanded] = useState(true);
   const [useMemory, setUseMemory] = useState(true);
 
   return (
-    <aside className="hidden h-full w-[360px] shrink-0 border-l border-border-light bg-[#212121] text-white xl:flex">
+    <aside
+      className={`hidden h-full w-[360px] shrink-0 border-l border-border-light xl:flex ${
+        isDarkMode ? 'bg-[#212121] text-white' : 'bg-[#f7f7f8] text-[#171717]'
+      }`}
+    >
       <div className="relative flex h-full w-full flex-col gap-4 px-3 py-3">
-        <div className="rounded-2xl border border-white/10 bg-[#171717] p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-white">
-            <BookOpen size={16} className="text-white/75" />
+        <div
+          className={`rounded-2xl p-3 ${
+            isDarkMode ? 'border border-white/10 bg-[#171717]' : 'border border-black/10 bg-white'
+          }`}
+        >
+          <div className={`flex items-center gap-2 text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-[#171717]'}`}>
+            <BookOpen size={16} className={isDarkMode ? 'text-white/75' : 'text-black/60'} />
             Memories
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#171717] p-3">
+        <div
+          className={`rounded-2xl p-3 ${
+            isDarkMode ? 'border border-white/10 bg-[#171717]' : 'border border-black/10 bg-white'
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#111111] px-3 py-2.5 text-sm text-white/45">
+            <div
+              className={`min-w-0 flex-1 rounded-xl px-3 py-2.5 text-sm ${
+                isDarkMode
+                  ? 'border border-white/10 bg-[#111111] text-white/45'
+                  : 'border border-black/10 bg-[#f7f7f8] text-black/45'
+              }`}
+            >
               Filter memories...
             </div>
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-transparent text-white/75 transition-colors hover:bg-white/5 hover:text-white"
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-xl bg-transparent transition-colors ${
+                isDarkMode
+                  ? 'border border-white/10 text-white/75 hover:bg-white/5 hover:text-white'
+                  : 'border border-black/10 text-black/60 hover:bg-black/5 hover:text-black'
+              }`}
               aria-label="Import memories"
               tabIndex={-1}
             >
@@ -438,7 +513,11 @@ function RightPanel({ onOpenSignup }: { onOpenSignup: () => void }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-transparent text-white/75 transition-colors hover:bg-white/5 hover:text-white"
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-xl bg-transparent transition-colors ${
+                isDarkMode
+                  ? 'border border-white/10 text-white/75 hover:bg-white/5 hover:text-white'
+                  : 'border border-black/10 text-black/60 hover:bg-black/5 hover:text-black'
+              }`}
               aria-label="Add memory"
               tabIndex={-1}
             >
@@ -447,7 +526,7 @@ function RightPanel({ onOpenSignup }: { onOpenSignup: () => void }) {
           </div>
 
           <div className="mt-4 flex items-center gap-3">
-            <span className="text-sm text-white/80">Use memory</span>
+            <span className={`text-sm ${isDarkMode ? 'text-white/80' : 'text-black/75'}`}>Use memory</span>
             <button
               type="button"
               onClick={() => setUseMemory((current) => !current)}
@@ -468,14 +547,22 @@ function RightPanel({ onOpenSignup }: { onOpenSignup: () => void }) {
 
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-[#171717]">
+        <div
+          className={`relative min-h-0 flex-1 overflow-hidden rounded-2xl ${
+            isDarkMode ? 'border border-white/10 bg-[#171717]' : 'border border-black/10 bg-white'
+          }`}
+        >
           <button
             type="button"
             onClick={onOpenSignup}
-            className="relative z-10 flex w-full items-center justify-between border-b border-white/10 px-4 py-3 text-left transition-colors hover:bg-white/5"
+            className={`relative z-10 flex w-full items-center justify-between px-4 py-3 text-left transition-colors ${
+              isDarkMode
+                ? 'border-b border-white/10 hover:bg-white/5'
+                : 'border-b border-black/10 hover:bg-black/5'
+            }`}
           >
-            <div className="text-sm font-medium text-white">Saved memories</div>
-            <ChevronsUpDown size={16} className="text-white/55" />
+            <div className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-[#171717]'}`}>Saved memories</div>
+            <ChevronsUpDown size={16} className={isDarkMode ? 'text-white/55' : 'text-black/45'} />
           </button>
 
           {memoryExpanded && (
@@ -483,18 +570,22 @@ function RightPanel({ onOpenSignup }: { onOpenSignup: () => void }) {
               {fakeMemories.map((memory) => (
                 <div
                   key={memory.key}
-                  className="rounded-2xl border border-white/10 bg-transparent p-4"
+                  className={`rounded-2xl bg-transparent p-4 ${
+                    isDarkMode ? 'border border-white/10' : 'border border-black/10'
+                  }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs text-white/55">
+                      <div className={`text-xs ${isDarkMode ? 'text-white/55' : 'text-black/50'}`}>
                         {memory.tokens} tokens&nbsp;&nbsp;{memory.date}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 text-white/60">
+                    <div className={`flex items-center gap-1 ${isDarkMode ? 'text-white/60' : 'text-black/55'}`}>
                       <button
                         type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/5 hover:text-white"
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                          isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-black/5 hover:text-black'
+                        }`}
                         aria-label={`Edit ${memory.key}`}
                         tabIndex={-1}
                       >
@@ -502,7 +593,9 @@ function RightPanel({ onOpenSignup }: { onOpenSignup: () => void }) {
                       </button>
                       <button
                         type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/5 hover:text-white"
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                          isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-black/5 hover:text-black'
+                        }`}
                         aria-label={`Delete ${memory.key}`}
                         tabIndex={-1}
                       >
@@ -510,7 +603,7 @@ function RightPanel({ onOpenSignup }: { onOpenSignup: () => void }) {
                       </button>
                     </div>
                   </div>
-                  <div className="mt-3 text-left text-[15px] leading-7 text-white">
+                  <div className={`mt-3 text-left text-[15px] leading-7 ${isDarkMode ? 'text-white' : 'text-[#171717]'}`}>
                     {memory.value}
                   </div>
                 </div>
@@ -539,6 +632,7 @@ function PreviewModelSelector({
   selectedModelEntry,
   onSelectOption,
   onSelectModelEntry,
+  isDarkMode,
 }: {
   options: PreviewOption[];
   modelEntries: PreviewModelEntry[];
@@ -546,6 +640,7 @@ function PreviewModelSelector({
   selectedModelEntry: PreviewModelEntry | null;
   onSelectOption: (key: string) => void;
   onSelectModelEntry: (entry: PreviewModelEntry) => void;
+  isDarkMode: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -562,32 +657,56 @@ function PreviewModelSelector({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition-colors hover:bg-white/10"
+        className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${
+          isDarkMode
+            ? 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+            : 'border-black/10 bg-white text-[#171717] hover:bg-black/5'
+        }`}
       >
-        <Lock size={14} className="text-white/65" />
+        <Lock size={14} className={isDarkMode ? 'text-white/65' : 'text-black/55'} />
         <span className="max-w-[320px] truncate">
           {selectedModelEntry?.label ?? selectedOption?.label ?? 'Choose a model'}
         </span>
         <ChevronDown
           size={14}
-          className={`text-white/55 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`${isDarkMode ? 'text-white/55' : 'text-black/45'} transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
         />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+10px)] z-30 w-[720px] overflow-hidden rounded-2xl border border-white/10 bg-[#1d1d1d] p-2 shadow-2xl shadow-black/30">
-          <div className="border-b border-white/10 px-3 py-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
+        <div
+          className={`absolute left-0 top-[calc(100%+10px)] z-30 w-[720px] overflow-hidden rounded-2xl border p-2 shadow-2xl ${
+            isDarkMode
+              ? 'border-white/10 bg-[#1d1d1d] shadow-black/30'
+              : 'border-black/10 bg-white shadow-black/10'
+          }`}
+        >
+          <div className={`px-3 py-3 ${isDarkMode ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
+            <div
+              className={`text-xs font-semibold uppercase tracking-[0.18em] ${
+                isDarkMode ? 'text-white/40' : 'text-black/40'
+              }`}
+            >
               Choose provider and model
             </div>
-            <div className="mt-1 text-sm text-white/60">
+            <div className={`mt-1 text-sm ${isDarkMode ? 'text-white/60' : 'text-black/60'}`}>
               Fast open menu with provider-first selection.
             </div>
           </div>
 
           <div className="grid grid-cols-[220px_minmax(0,1fr)] gap-2 p-2">
-            <div className="max-h-[480px] overflow-y-auto rounded-xl border border-white/10 bg-[#181818] p-2">
-              <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/35">
+            <div
+              className={`max-h-[480px] overflow-y-auto rounded-xl border p-2 ${
+                isDarkMode ? 'border-white/10 bg-[#181818]' : 'border-black/10 bg-[#fafafa]'
+              }`}
+            >
+              <div
+                className={`mb-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] ${
+                  isDarkMode ? 'text-white/35' : 'text-black/35'
+                }`}
+              >
                 Providers
               </div>
               <div className="space-y-1">
@@ -602,21 +721,37 @@ function PreviewModelSelector({
                       onClick={() => onSelectOption(option.key)}
                       className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors ${
                         isSelected
-                          ? 'bg-white/10 text-white'
-                          : 'text-white/75 hover:bg-white/5 hover:text-white'
+                          ? isDarkMode
+                            ? 'bg-white/10 text-white'
+                            : 'bg-black/8 text-[#171717]'
+                          : isDarkMode
+                            ? 'text-white/75 hover:bg-white/5 hover:text-white'
+                            : 'text-black/70 hover:bg-black/5 hover:text-black'
                       }`}
                     >
                       <span className="truncate">{option.label}</span>
-                      <span className="ml-2 shrink-0 text-xs text-white/40">{count}</span>
+                      <span
+                        className={`ml-2 shrink-0 text-xs ${
+                          isDarkMode ? 'text-white/40' : 'text-black/40'
+                        }`}
+                      >
+                        {count}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="max-h-[480px] overflow-y-auto rounded-xl border border-white/10 bg-[#181818] p-2">
+            <div
+              className={`max-h-[480px] overflow-y-auto rounded-xl border p-2 ${
+                isDarkMode ? 'border-white/10 bg-[#181818]' : 'border-black/10 bg-[#fafafa]'
+              }`}
+            >
               {entriesForSelectedProvider.length === 0 ? (
-                <div className="px-3 py-8 text-sm text-white/50">No models available for this provider.</div>
+                <div className={`px-3 py-8 text-sm ${isDarkMode ? 'text-white/50' : 'text-black/50'}`}>
+                  No models available for this provider.
+                </div>
               ) : (
                 <div className="space-y-1">
                   {entriesForSelectedProvider.map((entry) => {
@@ -633,19 +768,27 @@ function PreviewModelSelector({
                         className={`w-full rounded-xl border px-3 py-3 text-left transition-all ${
                           isSelected
                             ? 'border-green-500 bg-green-500/10'
-                            : 'border-white/10 bg-[#212121] hover:border-green-500/35'
+                            : isDarkMode
+                              ? 'border-white/10 bg-[#212121] hover:border-green-500/35'
+                              : 'border-black/10 bg-white hover:border-green-500/35'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-white">{entry.label}</div>
-                            <div className="mt-1 text-xs leading-5 text-white/55">{entry.subtitle}</div>
+                            <div className={`truncate text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-[#171717]'}`}>
+                              {entry.label}
+                            </div>
+                            <div className={`mt-1 text-xs leading-5 ${isDarkMode ? 'text-white/55' : 'text-black/55'}`}>
+                              {entry.subtitle}
+                            </div>
                           </div>
                           <div
                             className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
                               isSelected
                                 ? 'border-green-500 bg-green-500 text-white'
-                                : 'border-white/20 text-transparent'
+                                : isDarkMode
+                                  ? 'border-white/20 text-transparent'
+                                  : 'border-black/20 text-transparent'
                             }`}
                           >
                             <Check size={12} />
@@ -676,6 +819,7 @@ function CenterPanel({
   onSubmit,
   onWatchLive,
   onOpenSignup,
+  isDarkMode,
 }: {
   options: PreviewOption[];
   modelEntries: PreviewModelEntry[];
@@ -688,12 +832,13 @@ function CenterPanel({
   onSubmit: () => void;
   onWatchLive: () => void;
   onOpenSignup: () => void;
+  isDarkMode: boolean;
 }) {
   const canSubmit = draft.trim().length > 0 && selectedOption != null;
   const messagePlaceholder = `Message ${selectedModelEntry?.label ?? selectedOption?.label ?? 'GPT-5.4'}`;
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col bg-[#212121] text-white">
+    <main className={`flex min-w-0 flex-1 flex-col ${isDarkMode ? 'bg-[#212121] text-white' : 'bg-[#fafafa] text-[#171717]'}`}>
       <TopBar
         options={options}
         modelEntries={modelEntries}
@@ -702,6 +847,7 @@ function CenterPanel({
         onSelectOption={onSelect}
         onSelectModelEntry={onSelectModelEntry}
         onWatchLive={onWatchLive}
+        isDarkMode={isDarkMode}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -713,22 +859,38 @@ function CenterPanel({
                   <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
 
 
-                    <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-6xl">
+                    <h1 className={`text-3xl font-extrabold tracking-tight sm:text-6xl ${isDarkMode ? 'text-white' : 'text-[#171717]'}`}>
                       Good evening
                     </h1>
 
-                    <div className="mt-10 w-full rounded-[30px] border border-white/10 bg-[#2f2f2f] shadow-2xl shadow-black/20">
+                    <div
+                      className={`mt-10 w-full rounded-[30px] shadow-2xl ${
+                        isDarkMode
+                          ? 'border border-white/10 bg-[#2f2f2f] shadow-black/20'
+                          : 'border border-black/10 bg-white shadow-black/10'
+                      }`}
+                    >
                       <div className="p-5">
                         <textarea
                           value={draft}
                           onChange={(event) => onDraftChange(event.target.value)}
                           placeholder={messagePlaceholder}
-                          className="min-h-[110px] w-full resize-none bg-transparent text-base text-white placeholder:text-white/45 focus:outline-none"
+                          className={`min-h-[110px] w-full resize-none bg-transparent text-base focus:outline-none ${
+                            isDarkMode
+                              ? 'text-white placeholder:text-white/45'
+                              : 'text-[#171717] placeholder:text-black/40'
+                          }`}
                         />
 
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <div className="relative inline-flex items-center">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/40 bg-blue-500/15 px-3 py-1.5 text-sm text-blue-100">
+                            <div
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
+                                isDarkMode
+                                  ? 'border-blue-500/40 bg-blue-500/15 text-blue-100'
+                                  : 'border-blue-500/30 bg-blue-500/10 text-blue-700'
+                              }`}
+                            >
                               <Search size={14} />
                               Search
                             </div>
@@ -740,7 +902,13 @@ function CenterPanel({
                             />
                           </div>
                           <div className="relative inline-flex items-center">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/40 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-100">
+                            <div
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
+                                isDarkMode
+                                  ? 'border-violet-500/40 bg-violet-500/15 text-violet-100'
+                                  : 'border-violet-500/30 bg-violet-500/10 text-violet-700'
+                              }`}
+                            >
                               <Sparkles size={14} />
                               Memory Auto
                             </div>
@@ -752,10 +920,16 @@ function CenterPanel({
                             />
                           </div>
                           <div className="relative inline-flex items-center">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/85">
+                            <div
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
+                                isDarkMode
+                                  ? 'border-white/15 bg-white/5 text-white/85'
+                                  : 'border-black/10 bg-black/5 text-black/75'
+                              }`}
+                            >
                               <Wand2 size={14} />
                               MCP Servers
-                              <ChevronDown size={14} className="text-white/50" />
+                              <ChevronDown size={14} className={isDarkMode ? 'text-white/50' : 'text-black/40'} />
                             </div>
                             <button
                               type="button"
@@ -765,7 +939,13 @@ function CenterPanel({
                             />
                           </div>
                           <div className="relative inline-flex items-center">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100">
+                            <div
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
+                                isDarkMode
+                                  ? 'border-amber-500/40 bg-amber-500/15 text-amber-100'
+                                  : 'border-amber-500/30 bg-amber-500/10 text-amber-700'
+                              }`}
+                            >
                               <Sparkles size={14} />
                               Fallback
                             </div>
@@ -797,7 +977,7 @@ function CenterPanel({
             </div>
           </div>
 
-          <RightPanel onOpenSignup={onOpenSignup} />
+          <RightPanel onOpenSignup={onOpenSignup} isDarkMode={isDarkMode} />
         </div>
       </div>
     </main>
@@ -806,11 +986,13 @@ function CenterPanel({
 
 export default function Preview() {
   const navigate = useNavigate();
+  const { theme } = useContext(ThemeContext);
   const { isAuthenticated } = useAuthContext();
   const { data: startupConfig } = useGetStartupConfig();
   const { data: modelsData } = useGetModelsQuery({ enabled: true, refetchOnMount: 'always' });
 
   const [videoOpen, setVideoOpen] = useState(false);
+  const isDarkMode = isDark(theme);
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState<AuthTab>('login');
   const [draft, setDraft] = useState('');
@@ -913,12 +1095,13 @@ export default function Preview() {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#171717]">
+    <div className={`flex h-screen w-full overflow-hidden ${isDarkMode ? 'bg-[#171717]' : 'bg-white'}`}>
       <LeftRail
         onOpenSignup={() => {
           setAuthTab('register');
           setAuthOpen(true);
         }}
+        isDarkMode={isDarkMode}
       />
 
       <CenterPanel
@@ -939,6 +1122,7 @@ export default function Preview() {
           setAuthTab('register');
           setAuthOpen(true);
         }}
+        isDarkMode={isDarkMode}
       />
 
       <PreviewAuthModal

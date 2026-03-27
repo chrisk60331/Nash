@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, ArrowRight, Play, Zap, Shield, Brain, Users } from 'lucide-react';
+import { ThemeContext, isDark } from '@librechat/client';
 import { useGetStartupConfig } from '~/data-provider';
 
 const YOUTUBE_ID = 'CerDLYA27NA';
@@ -67,27 +68,40 @@ const features = [
 
 export default function Landing() {
   const [videoOpen, setVideoOpen] = useState(false);
+  const { theme } = useContext(ThemeContext);
   const { data: startupConfig } = useGetStartupConfig();
   const appTitle = startupConfig?.appTitle ?? 'Nash';
+  const isDarkMode = isDark(theme);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-surface-primary text-text-primary">
+    <div
+      className={`relative min-h-screen overflow-hidden text-text-primary ${
+        isDarkMode ? 'bg-[#171717]' : 'bg-white'
+      }`}
+    >
       {/* Background blobs */}
-      <div className="pointer-events-none absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-bb-blue/10 blur-[100px] dark:bg-bb-blue/15" />
-      <div className="pointer-events-none absolute top-1/3 -left-32 h-[400px] w-[400px] rounded-full bg-green-500/8 blur-[80px] dark:bg-green-500/12" />
-      <div className="pointer-events-none absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-bb-steel/20 blur-[90px] dark:bg-bb-steelDark/30" />
+      <div
+        className={`pointer-events-none absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full blur-[100px] ${
+          isDarkMode ? 'bg-bb-blue/15' : 'bg-bb-blue/10'
+        }`}
+      />
+      <div
+        className={`pointer-events-none absolute top-1/3 -left-32 h-[400px] w-[400px] rounded-full blur-[80px] ${
+          isDarkMode ? 'bg-green-500/12' : 'bg-green-500/8'
+        }`}
+      />
+      <div
+        className={`pointer-events-none absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full blur-[90px] ${
+          isDarkMode ? 'bg-bb-steelDark/30' : 'bg-bb-steel/20'
+        }`}
+      />
 
       {/* Nav */}
       <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-2.5">
           <img
-            src="assets/nash.png"
-            className="h-8 w-auto object-contain dark:hidden"
-            alt={appTitle}
-          />
-          <img
-            src="assets/nash_dark.png"
-            className="hidden h-8 w-auto object-contain dark:block"
+            src={isDarkMode ? 'assets/nash_dark.png' : 'assets/nash.png'}
+            className="h-8 w-auto object-contain"
             alt={appTitle}
           />
         </div>
@@ -111,7 +125,11 @@ export default function Landing() {
       {/* Hero */}
       <main className="relative z-10 mx-auto max-w-6xl px-6 pt-16 pb-24 text-center">
         {/* Pill badge */}
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-bb-blue/30 bg-bb-blue/10 px-3.5 py-1.5 text-xs font-semibold text-bb-blue dark:bg-bb-blue/20 dark:text-white">
+        <div
+          className={`mb-6 inline-flex items-center gap-2 rounded-full border border-bb-blue/30 px-3.5 py-1.5 text-xs font-semibold ${
+            isDarkMode ? 'bg-bb-blue/20 text-white' : 'bg-bb-blue/10 text-bb-blue'
+          }`}
+        >
           <Sparkles size={12} />
           The AI workspace for teams that ship
         </div>
@@ -223,13 +241,8 @@ export default function Landing() {
       <footer className="relative z-10 border-t border-border-light px-6 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 sm:flex-row sm:justify-between">
           <img
-            src="assets/nash.png"
-            className="h-6 w-auto object-contain dark:hidden"
-            alt={appTitle}
-          />
-          <img
-            src="assets/nash_dark.png"
-            className="hidden h-6 w-auto object-contain dark:block"
+            src={isDarkMode ? 'assets/nash_dark.png' : 'assets/nash.png'}
+            className="h-6 w-auto object-contain"
             alt={appTitle}
           />
           <div className="flex items-center gap-6 text-xs text-text-tertiary">

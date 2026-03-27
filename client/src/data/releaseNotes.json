@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Landing theme support:** Updated `/` to honor the resolved system light/dark theme instead of staying visually tied to dark-mode-only asset and surface assumptions.\n- **Preview theme support:** Updated `/preview` to follow the resolved system theme, including light-mode surfaces, rails, composer styling, and gated drawer presentation.\n- **Model picker light mode fixes:** Fixed the preview model selector trigger visibility in light mode and added proper light-mode styling for the provider/model dropdown.\n- **Release metadata:** Bumped application and package versions to `v2.16.1`.",
+        "publishedAt": "2026-03-27T14:15:36Z",
+        "tagName": "v2.16.1",
+        "title": "v2.16.1"
+    },
+    {
         "body": "**Feature release**\n\n- **Preview auth flow:** Added a dedicated preview authentication flow with shared modal state, preview auth provider support, landing/preview route updates, and registration/login handoff that preserves pending chat drafts into full chat.\n- **Preview shell polish:** Built the new `/preview` experience with gated left/right drawers, enterprise CTA reuse, faster provider-first model selection, dynamic composer placeholder updates, and chat area styling aligned more closely to `/c`.\n- **Auth and routing integration:** Updated auth, startup, redirect, root, chat, sender, and message submission flows so preview-triggered signup/login works cleanly across route transitions and authenticated conversation startup.\n- **Backend auth and agents support:** Expanded auth/backend support for the preview flow, including assistant/config migration handling, registration/login flow updates, and agents/model selector integration changes needed by the new preview entrypoint.\n- **Release metadata:** Bumped application and package versions to `v2.16.0`.",
         "publishedAt": "2026-03-27T06:14:46Z",
         "tagName": "v2.16.0",
