@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Credit-funded overage billing:** Free-tier overage can now spend token credits using model-specific pricing from `librechat.yaml`, using exact `input_tokens` and `output_tokens` from Backboard runs instead of a flat average.\n- **Paid-plan fallback flow:** Plus/Unlimited users who exhaust included usage now fall back to a free model when no credits or Stripe metering are available, with a prepended downgrade/upsell notice and conversation metadata updated to the actual fallback model.\n- **Billing and test tooling:** Added scripts to inspect and set user token usage, credits, and plans for UI testing, and synced `librechat.yaml` model pricing from the model list CSV so free-vs-paid gating follows config rather than hardcoded model exceptions.",
+        "publishedAt": "2026-03-27T00:00:00Z",
+        "tagName": "v2.15.1",
+        "title": "v2.15.1"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Long message handling:** Extra-long user messages are now uploaded and indexed as Backboard documents before responding, with inline status updates during indexing.\n- **Fallback model:** On model failure, we now fall back to tier-appropriate models (paid → GPT‑4.1, free → OpenRouter free) and persist a clear fallback notice.\n- **Chat UI polish:** GitHub/referral badges moved into the right config drawer, version label moved under the left drawer user card, footer scrolling quotes removed, and badge toggles are now uniform height.",
         "publishedAt": "2026-03-26T00:00:00Z",
         "tagName": "v2.15.0",

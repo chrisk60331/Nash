@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from api.config import settings
-from api.monetization_models import BalanceRecord, LedgerEntry
+from api.monetization_models import BalanceRecord, LedgerEntry, LedgerEntryType
 from api.services.async_runner import run_async
 from api.services.backboard_service import get_client
 from api.services.user_service import get_user_config_assistant_id_async
@@ -64,7 +64,9 @@ async def _load_balance_bundle(
     client = get_client()
     response = await client.get_memories(assistant_id)
 
-    balance_record, ledger_records = _extract_balance_bundle_from_memories(response.memories)
+    balance_record, ledger_records = _extract_balance_bundle_from_memories(
+        response.memories
+    )
     balance_row: tuple[BalanceRecord, str] | None = None
     ledger_rows: list[tuple[LedgerEntry, str]] = []
 
@@ -95,7 +97,9 @@ async def _load_balance_bundle(
     return balance_row, ledger_rows
 
 
-async def _persist_balance(user_id: str, record: BalanceRecord, memory_id: str | None = None) -> BalanceRecord:
+async def _persist_balance(
+    user_id: str, record: BalanceRecord, memory_id: str | None = None
+) -> BalanceRecord:
     assistant_id = await get_user_config_assistant_id_async(user_id)
     client = get_client()
     payload = record.model_dump(mode="json")
@@ -151,15 +155,15 @@ def list_ledger_entries(user_id: str, limit: int = 20) -> list[dict]:
     return entries
 
 
-def award_token_credits(
+def _apply_token_credit_delta(
     user_id: str,
     *,
-    token_credits: int,
-    entry_type: str,
+    token_credits_delta: int,
+    entry_type: LedgerEntryType,
     description: str,
     metadata: dict[str, str | int | float | bool | None] | None = None,
 ) -> dict:
-    if token_credits <= 0:
+    if token_credits_delta == 0:
         return get_balance_response(user_id)
 
     balance_row, _ = run_async(_load_balance_bundle(user_id))
@@ -169,8 +173,12 @@ def award_token_credits(
         balance_record = BalanceRecord(user=user_id)
         balance_memory_id = None
 
+    new_token_credits = balance_record.tokenCredits + token_credits_delta
+    if new_token_credits < 0:
+        raise ValueError("Insufficient token credits")
+
     updated_balance = balance_record.model_copy(
-        update={"tokenCredits": balance_record.tokenCredits + token_credits}
+        update={"tokenCredits": new_token_credits}
     )
     run_async(_persist_balance(user_id, updated_balance, balance_memory_id))
 
@@ -179,8 +187,8 @@ def award_token_credits(
         id=str(uuid.uuid4()),
         user=user_id,
         entryType=entry_type,
-        tokenCreditsDelta=token_credits,
-        usdValue=token_credits_to_usd(token_credits),
+        tokenCreditsDelta=token_credits_delta,
+        usdValue=token_credits_to_usd(abs(token_credits_delta)),
         description=description,
         metadata=metadata or {},
         createdAt=now,
@@ -203,3 +211,42 @@ def award_token_credits(
 
     run_async(_create_entry())
     return get_balance_response(user_id)
+
+
+def award_token_credits(
+    user_id: str,
+    *,
+    token_credits: int,
+    entry_type: LedgerEntryType,
+    description: str,
+    metadata: dict[str, str | int | float | bool | None] | None = None,
+) -> dict:
+    if token_credits <= 0:
+        return get_balance_response(user_id)
+
+    return _apply_token_credit_delta(
+        user_id,
+        token_credits_delta=token_credits,
+        entry_type=entry_type,
+        description=description,
+        metadata=metadata,
+    )
+
+
+def spend_token_credits(
+    user_id: str,
+    *,
+    token_credits: int,
+    description: str,
+    metadata: dict[str, str | int | float | bool | None] | None = None,
+) -> dict:
+    if token_credits <= 0:
+        return get_balance_response(user_id)
+
+    return _apply_token_credit_delta(
+        user_id,
+        token_credits_delta=-token_credits,
+        entry_type="chat_overage_spend",
+        description=description,
+        metadata=metadata,
+    )

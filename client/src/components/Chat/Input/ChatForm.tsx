@@ -19,7 +19,7 @@ import {
   useSubmitMessage,
   useFocusChatEffect,
 } from '~/hooks';
-import { useGetSubscription, useGetStartupConfig } from '~/data-provider';
+import { useGetSubscription, useGetStartupConfig, useGetUserBalance } from '~/data-provider';
 import BillingModal from '~/components/Nav/BillingModal';
 import { mainTextareaId, BadgeItem } from '~/common';
 import AttachFileChat from './Files/AttachFileChat';
@@ -53,8 +53,15 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   const { data: startupConfig } = useGetStartupConfig();
   const billingEnabled = !!startupConfig?.billing?.enabled;
   const { data: subscription } = useGetSubscription({ enabled: billingEnabled });
+  const { data: balance } = useGetUserBalance({
+    enabled: !!startupConfig?.balance?.enabled,
+  });
+  const hasTokenCredits = Number(balance?.tokenCredits ?? 0) > 0;
+  const currentPlan = subscription?.plan ?? 'free';
   const isOverLimit = billingEnabled && subscription != null
-    && subscription.usageTokens >= subscription.includedTokens;
+    && currentPlan === 'free'
+    && subscription.usageTokens >= subscription.includedTokens
+    && !hasTokenCredits;
 
   const handleBillingClose = useCallback((open: boolean) => {
     setShowBillingGate(open);

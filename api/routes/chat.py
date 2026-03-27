@@ -21,7 +21,7 @@ from flask import Blueprint, Response, g, jsonify, request
 from api.config import settings
 from api.middleware.jwt_auth import require_jwt
 from api.routes.billing import get_user_plan
-from api.routes.config_routes import FREE_TIER_PROVIDERS
+from api.routes.config_routes import FREE_TIER_PROVIDERS, _load_endpoint_config
 from api.services.async_runner import iter_async, run_async
 from api.services.backboard_service import (
     get_client,
@@ -29,6 +29,7 @@ from api.services.backboard_service import (
     run_with_tool_loop,
     stream_message_proxy_compatible,
 )
+from api.services.balance_service import get_balance_response
 from api.services.conversation_service import (
     _get_conversation_meta,
     _save_conversation_meta,
@@ -37,7 +38,11 @@ from api.services.conversation_service import (
     save_fallback_notice,
     save_regen_graph,
 )
-from api.services.token_service import check_token_limit, record_token_usage
+from api.services.token_service import (
+    check_token_limit,
+    get_token_usage,
+    record_token_usage,
+)
 from api.services.user_service import (
     find_user_by_id,
     get_user_assistant_id,
@@ -139,13 +144,83 @@ def _is_free_tier_model(model_name: str) -> bool:
     if not model_name:
         return False
 
+    normalized_model = model_name.lower().strip()
+
+    cfg = _load_endpoint_config()
+    model_pricing = cfg.get("modelPricing", {}) or {}
+    pricing = model_pricing.get(model_name) or model_pricing.get(normalized_model) or {}
+    if isinstance(pricing, dict):
+        input_cost = float(pricing.get("inputCostPer1mTokens", 0) or 0)
+        output_cost = float(pricing.get("outputCostPer1mTokens", 0) or 0)
+        if input_cost <= 0 and output_cost <= 0:
+            return True
+
+    custom_endpoints = cfg.get("endpoints", {}).get("custom", [])
+    for endpoint in custom_endpoints:
+        selector_tiers = endpoint.get("selectorTiers", {}) or {}
+        free_models = selector_tiers.get("free", []) or []
+        for free_model in free_models:
+            if (
+                isinstance(free_model, str)
+                and free_model.lower().strip() == normalized_model
+            ):
+                return True
+
     providers = {p.lower() for p in FREE_TIER_PROVIDERS}
-    segments = model_name.lower().split("/")
+    segments = normalized_model.split("/")
     return any(
         seg == provider or seg.startswith(f"{provider}-") or seg.startswith(provider)
         for provider in providers
         for seg in segments
     )
+
+
+def _resolve_endpoint_for_model(model_name: str, fallback_endpoint: str) -> str:
+    if not model_name:
+        return fallback_endpoint
+
+    normalized_model = model_name.lower().strip()
+    cfg = _load_endpoint_config()
+    custom_endpoints = cfg.get("endpoints", {}).get("custom", [])
+    for endpoint_cfg in custom_endpoints:
+        endpoint_name = endpoint_cfg.get("name", "") or fallback_endpoint
+        raw_models = endpoint_cfg.get("models", {}).get("default", [])
+        for raw_model in raw_models:
+            candidate = (
+                raw_model.get("name", "") if isinstance(raw_model, dict) else raw_model
+            )
+            if (
+                isinstance(candidate, str)
+                and candidate.lower().strip() == normalized_model
+            ):
+                return endpoint_name
+
+    return fallback_endpoint
+
+
+def _should_force_free_model_fallback(user_id: str, requested_model: str) -> bool:
+    user = find_user_by_id(user_id)
+    if not user:
+        return False
+
+    if get_user_plan(user) == "free":
+        return False
+
+    if _is_free_tier_model(requested_model):
+        return False
+
+    usage = get_token_usage(user_id)
+    if usage["tokensRemaining"] > 0:
+        return False
+
+    balance = get_balance_response(user_id)
+    if int(balance.get("tokenCredits", 0) or 0) > 0:
+        return False
+
+    if user.get("stripeMeteredItemId", ""):
+        return False
+
+    return True
 
 
 def _is_tool_use_error(message: str) -> bool:
@@ -655,6 +730,21 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
     ):
         fallback_model = None
 
+    forced_fallback_prefix = ""
+    if model and _should_force_free_model_fallback(user_id, model):
+        forced_fallback_prefix = (
+            f"*{_friendly_model_name(model)} exceeded your included paid-plan usage, "
+            f"so I used {_friendly_model_name(FALLBACK_MODEL_FREE)} instead because you have no credits or metered billing configured.*\n\n"
+        )
+        logger.warning(
+            "[chat] forcing free-model fallback for user_id=%s requested_model=%s fallback_model=%s",
+            user_id,
+            model,
+            FALLBACK_MODEL_FREE,
+        )
+        model = FALLBACK_MODEL_FREE
+        endpoint = _resolve_endpoint_for_model(model, endpoint)
+
     # Load MCP server configs if any are enabled for this conversation.
     mcp_server_map: dict = {}
     if isinstance(ephemeral_agent, dict):
@@ -685,6 +775,7 @@ def _prepare_stream(stream_id: str, user_id: str, payload: dict) -> dict:
         "pre_queue": pre_queue,
         "mcp_server_map": mcp_server_map,
         "fallback_model": fallback_model,
+        "forced_fallback_prefix": forced_fallback_prefix,
     }
 
 
@@ -722,7 +813,19 @@ def start_chat(endpoint_name=None):
         payload.get("endpoint") or payload.get("endpointType"),
     )
 
-    limit_error = check_token_limit(g.user_id)
+    requested_model = _extract_requested_model(payload)
+    user = find_user_by_id(g.user_id)
+    plan = get_user_plan(user)
+    force_free_model_fallback = (
+        plan != "free"
+        and requested_model
+        and _should_force_free_model_fallback(g.user_id, requested_model)
+    )
+    limit_error = (
+        None
+        if force_free_model_fallback
+        else check_token_limit(g.user_id, requested_model)
+    )
     if limit_error:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         user_text = _extract_user_text(payload)
@@ -798,9 +901,6 @@ def start_chat(endpoint_name=None):
             }
         )
 
-    user = find_user_by_id(g.user_id)
-    plan = get_user_plan(user)
-    requested_model = _extract_requested_model(payload)
     if plan == "free" and requested_model and not _is_free_tier_model(requested_model):
         return (
             jsonify(
@@ -904,12 +1004,14 @@ def stream_chat(stream_id):
         user_id = stream_state["userId"]
         full_text = ""
         total_tokens = 0
+        input_tokens = 0
+        output_tokens = 0
         conversation_id = stream_state.get("conversationId", "")
         fallback_succeeded = False
-        persisted_fallback_prefix = ""
 
         try:
             ctx = _prepare_stream(stream_id, user_id, payload)
+            persisted_fallback_prefix = ctx.get("forced_fallback_prefix", "")
         except Exception:
             logger.exception(
                 "[chat] stream: prepare failed for stream_id=%s", stream_id
@@ -1010,7 +1112,7 @@ def stream_chat(stream_id):
         else:
 
             def _consume(web_search_mode, model_override: str | None = None):
-                nonlocal full_text, total_tokens
+                nonlocal full_text, total_tokens, input_tokens, output_tokens
                 stream_started = time.monotonic()
                 chunk_count = 0
                 for chunk in _open_backboard_stream(
@@ -1034,9 +1136,14 @@ def stream_chat(stream_id):
                                 chunk_count,
                                 len(content),
                             )
+                        rendered_text = (
+                            persisted_fallback_prefix + full_text
+                            if persisted_fallback_prefix
+                            else full_text
+                        )
                         yield {
                             "type": "text",
-                            "text": {"value": full_text},
+                            "text": {"value": rendered_text},
                             "index": 0,
                             "messageId": response_message_id,
                             "conversationId": conversation_id,
@@ -1045,10 +1152,14 @@ def stream_chat(stream_id):
                             "stream": True,
                         }
                     elif chunk_type in ("run_ended", "run_completed"):
+                        input_tokens = int(chunk.get("input_tokens", 0) or 0)
+                        output_tokens = int(chunk.get("output_tokens", 0) or 0)
                         total_tokens = int(chunk.get("total_tokens", 0) or 0)
                         logger.warning(
-                            "[chat] stream: %s, total_tokens=%d",
+                            "[chat] stream: %s, input_tokens=%d, output_tokens=%d, total_tokens=%d",
                             chunk_type,
+                            input_tokens,
+                            output_tokens,
                             total_tokens,
                         )
                         return
@@ -1105,7 +1216,11 @@ def stream_chat(stream_id):
                             # full_text was accumulated by _consume; prepend the notice.
                             full_text = fallback_prefix + full_text
                             model = chosen_fallback
+                            endpoint = _resolve_endpoint_for_model(
+                                chosen_fallback, endpoint
+                            )
                             ctx["model"] = chosen_fallback
+                            ctx["endpoint"] = endpoint
                             fallback_succeeded = True
                         except Exception:
                             logger.exception(
@@ -1127,9 +1242,24 @@ def stream_chat(stream_id):
 
         if total_tokens == 0:
             total_tokens = (len(ctx["user_text"]) + len(full_text)) // 4 + 1
+            if input_tokens == 0 and output_tokens == 0:
+                input_tokens = max(1, len(ctx["user_text"]) // 4)
+                output_tokens = max(1, total_tokens - input_tokens)
 
         if total_tokens > 0:
-            record_token_usage(user_id, total_tokens)
+            record_token_usage(
+                user_id,
+                total_tokens,
+                model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+
+        final_text = (
+            persisted_fallback_prefix + full_text
+            if persisted_fallback_prefix
+            else full_text
+        )
 
         response_message = {
             "messageId": response_message_id,
@@ -1137,7 +1267,7 @@ def stream_chat(stream_id):
             "parentMessageId": (override_parent_message_id or parent_message_id)
             if is_regenerate
             else user_message_id,
-            "text": full_text,
+            "text": final_text,
             "sender": "Nash",
             "isCreatedByUser": False,
             "model": model,
@@ -1145,7 +1275,7 @@ def stream_chat(stream_id):
             "createdAt": now,
             "error": False,
             "unfinished": False,
-            "content": [{"type": "text", "text": {"value": full_text}}],
+            "content": [{"type": "text", "text": {"value": final_text}}],
         }
 
         final_event = {

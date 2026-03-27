@@ -5,12 +5,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 RefillIntervalUnit = Literal["seconds", "minutes", "hours", "days", "weeks", "months"]
 LedgerEntryType = Literal[
     "referral_reward",
     "promo_redemption",
     "admin_grant",
+    "chat_overage_spend",
 ]
 ReferralEventType = Literal[
     "signup_attributed",
