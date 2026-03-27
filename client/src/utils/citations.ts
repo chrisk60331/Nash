@@ -44,3 +44,6 @@ export const CLEANUP_REGEX =
 /** Matches invalid/orphaned citations (with leading whitespace) for removal */
 export const INVALID_CITATION_REGEX =
   /\s*(?:\\ue202|\ue202)turn\d+(search|news|image|video|ref|file)\d+/g;
+
+/** Matches bracket-style numeric citations like [1], [16, 17, 23], [1,2] produced by LLMs from source documents */
+export const BRACKET_CITATION_REGEX = /\s*\[\d+(?:,\s*\d+)*\]/g;

@@ -307,7 +307,7 @@ def _get_startup_config() -> dict:
             "modelSelect": True,
             "parameters": True,
             "sidePanel": True,
-            "presets": True,
+            "presets": False,
             "bookmarks": True,
             "agents": {"use": True, "create": True, "share": False, "public": False},
             "prompts": True,

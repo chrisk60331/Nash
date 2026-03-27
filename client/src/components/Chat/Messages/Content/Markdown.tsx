@@ -18,6 +18,7 @@ import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
 import { ArtifactProvider, CodeBlockProvider } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { langSubset, preprocessLaTeX } from '~/utils';
+import { BRACKET_CITATION_REGEX } from '~/utils/citations';
 import { unicodeCitation } from '~/components/Web';
 import { code, a, p, img } from './MarkdownComponents';
 import store from '~/store';
@@ -35,7 +36,8 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
     if (isInitializing) {
       return '';
     }
-    return LaTeXParsing ? preprocessLaTeX(content) : content;
+    const stripped = content.replace(BRACKET_CITATION_REGEX, '');
+    return LaTeXParsing ? preprocessLaTeX(stripped) : stripped;
   }, [content, LaTeXParsing, isInitializing]);
 
   const rehypePlugins = useMemo(

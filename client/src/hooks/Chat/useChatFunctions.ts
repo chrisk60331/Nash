@@ -70,6 +70,7 @@ export default function useChatFunctions({
   const setFilesToDelete = useSetFilesToDelete();
   const getEphemeralAgent = useGetEphemeralAgent();
   const isTemporary = useRecoilValue(store.isTemporary);
+  const fallbackModel = useRecoilValue(store.fallbackModel);
   const { getExpiry } = useUserKey(immutableConversation?.endpoint ?? '');
   const setIsSubmitting = useSetRecoilState(store.isSubmittingFamily(index));
   const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(index));
@@ -122,7 +123,10 @@ export default function useChatFunctions({
       return;
     }
 
-    const ephemeralAgent = getEphemeralAgent(conversationId ?? Constants.NEW_CONVO);
+    const ephemeralAgent = {
+      ...(getEphemeralAgent(conversationId ?? Constants.NEW_CONVO) ?? {}),
+      fallback_model: fallbackModel,
+    };
     const isEditOrContinue = isEdited || isContinued;
 
     let currentMessages: TMessage[] | null = overrideMessages ?? getMessages() ?? [];

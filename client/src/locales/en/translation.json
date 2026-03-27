@@ -586,6 +586,8 @@
   "com_nav_plus_command": "+-Command",
   "com_nav_plus_command_description": "Toggle command \"+\" for adding a multi-response setting",
   "com_nav_profile_picture": "Profile Picture",
+  "com_nav_fallback_model": "GPT-4.1 Fallback",
+  "com_nav_info_fallback_model": "If the selected model fails, automatically retry your message with GPT-4.1 and note the switch in the response.",
   "com_nav_save_badges_state": "Save badges state",
   "com_nav_save_drafts": "Save drafts locally",
   "com_nav_scroll_button": "Scroll to the end button",

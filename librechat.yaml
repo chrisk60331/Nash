@@ -6,7 +6,7 @@ interface:
   modelSelect: true
   parameters: true
   sidePanel: true
-  presets: true
+  presets: false
   bookmarks: true
   agents:
     use: true

@@ -65,6 +65,13 @@ const toggleSwitchConfigs = [
     key: 'showScrollButton',
   },
   {
+    stateAtom: store.fallbackModel,
+    localizationKey: 'com_nav_fallback_model' as const,
+    switchId: 'fallbackModel',
+    hoverCardText: 'com_nav_info_fallback_model' as const,
+    key: 'fallbackModel',
+  },
+  {
     stateAtom: store.saveBadgesState,
     localizationKey: 'com_nav_save_badges_state' as const,
     switchId: 'showBadges',

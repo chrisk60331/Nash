@@ -164,13 +164,13 @@ Test alert sent."
   # ── Evaluate /api/init result ──────────────────────────────────────────────
   if [[ "${INIT_EXIT}" -eq 28 ]]; then
     # curl exit 28 = operation timed out — this IS the non-responsive condition
-    printf "\a"
     printf "${RED}[%s][%s] HUNG  /api/init: TIMED OUT after %ds — NON-RESPONSIVE CONDITION DETECTED (check=%d fails=%d)${RST}\n" \
       "${TS}" "${VER}" "${INIT_TIMEOUT}" "${CHECK_COUNT}" "$((FAIL_COUNT + 1))"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     IS_FAILED=1
     CONSEC_FAIL=$((CONSEC_FAIL + 1))
     if [[ "${CONSEC_FAIL}" -eq "${ALERT_THRESHOLD}" ]]; then
+    printf "\a"
       _send_alert \
         "ALERT: Nash is HUNG ${CONSEC_FAIL}x" \
         "Nash watchdog detected ${CONSEC_FAIL} consecutive timeouts on /api/init at ${TS}.
@@ -184,7 +184,6 @@ Check App Runner logs and restart if needed."
 
 
   elif [[ "${INIT_EXIT}" -ne 0 || "${INIT_STATUS}" != "200" ]]; then
-    printf "\a"
     printf "${RED}[%s][%s] FAIL  /api/init: http=%s curl_exit=%d (%dms) (check=%d fails=%d)${RST}\n" \
       "${TS}" "${VER}" "${INIT_STATUS:-??}" "${INIT_EXIT}" "${INIT_MS}" "${CHECK_COUNT}" "$((FAIL_COUNT + 1))"
     if [[ -s "${BODY_FILE}" ]]; then
@@ -194,6 +193,7 @@ Check App Runner logs and restart if needed."
     CONSEC_FAIL=$((CONSEC_FAIL + 1))
     IS_FAILED=1
     if [[ "${CONSEC_FAIL}" -eq "${ALERT_THRESHOLD}" ]]; then
+      printf "\a"
       _send_alert \
         "ALERT: Nash is DOWN ${CONSEC_FAIL}x" \
         "Nash watchdog detected ${CONSEC_FAIL} consecutive errors on /api/init at ${TS}.
