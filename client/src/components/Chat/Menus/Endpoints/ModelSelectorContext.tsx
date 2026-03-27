@@ -10,6 +10,7 @@ import {
   useEndpoints,
   useLocalize,
 } from '~/hooks';
+import { useAuthContext } from '~/hooks/AuthContext';
 import { useAgentsMapContext, useAssistantsMapContext, useLiveAnnouncer } from '~/Providers';
 import { useGetEndpointsQuery, useListAgentsQuery } from '~/data-provider';
 import { useModelSelectorChatContext } from './ModelSelectorChatContext';
@@ -58,6 +59,7 @@ interface ModelSelectorProviderProps {
 }
 
 export function ModelSelectorProvider({ children, startupConfig }: ModelSelectorProviderProps) {
+  const { isAuthenticated } = useAuthContext();
   const agentsMap = useAgentsMapContext();
   const assistantsMap = useAssistantsMapContext();
   const { data: endpointsConfig } = useGetEndpointsQuery();
@@ -88,6 +90,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
   const { data: agents = null } = useListAgentsQuery(
     { requiredPermission: permissionLevel },
     {
+      enabled: isAuthenticated,
       select: (data) => data?.data,
     },
   );

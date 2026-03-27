@@ -6,7 +6,11 @@ import { useGetEndpointsQuery } from '~/data-provider';
 export default function useGetSender() {
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
   return useCallback(
-    (endpointOption: TEndpointOption) => {
+    (endpointOption: TEndpointOption | null | undefined) => {
+      if (endpointOption == null) {
+        return '';
+      }
+
       const { modelDisplayLabel } = endpointsConfig?.[endpointOption.endpoint ?? ''] ?? {};
       return getResponseSender({ ...endpointOption, modelDisplayLabel });
     },

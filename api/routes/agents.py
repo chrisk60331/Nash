@@ -2,12 +2,12 @@ import json
 import logging
 import uuid
 
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
 
 from api.middleware.jwt_auth import require_jwt
-from api.services.backboard_service import get_client
 from api.services.async_runner import run_async
-from api.services.user_service import get_user_config_assistant_id, get_all_users
+from api.services.backboard_service import get_client
+from api.services.user_service import get_all_users, get_user_config_assistant_id
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,11 @@ async def _list_agents(assistant_id: str) -> list[dict]:
                 system_prompt=a.get("instructions", ""),
             )
             a["bb_assistant_id"] = str(bb.assistant_id)
-            logger.warning("[agents] migration: created Backboard assistant %s for agent %s", a["bb_assistant_id"], a["id"])
+            logger.warning(
+                "[agents] migration: created Backboard assistant %s for agent %s",
+                a["bb_assistant_id"],
+                a["id"],
+            )
             dirty = True
         if dirty:
             needs_update.append(a)
@@ -60,7 +64,9 @@ async def _list_agents(assistant_id: str) -> list[dict]:
                 metadata={"type": AGENT_META_TYPE, "agentId": content["id"]},
             )
         except Exception:
-            logger.exception("[agents] migration: failed to persist agent %s", a.get("id"))
+            logger.exception(
+                "[agents] migration: failed to persist agent %s", a.get("id")
+            )
 
     return agents
 
@@ -68,16 +74,30 @@ async def _list_agents(assistant_id: str) -> list[dict]:
 @agents_bp.route("/api/agents", methods=["GET"])
 @require_jwt
 def list_agents():
+    logger.info(
+        "[preview-debug] agents.list request user_id=%s requiredPermission=%s origin=%s referer=%s",
+        getattr(g, "user_id", None),
+        request.args.get("requiredPermission"),
+        request.headers.get("Origin"),
+        request.headers.get("Referer"),
+    )
     assistant_id = get_user_config_assistant_id(g.user_id)
     agents = run_async(_list_agents(assistant_id))
     cleaned = [{k: v for k, v in a.items() if k != "_memory_id"} for a in agents]
-    return jsonify({
-        "object": "list",
-        "data": cleaned,
-        "first_id": cleaned[0]["id"] if cleaned else "",
-        "last_id": cleaned[-1]["id"] if cleaned else "",
-        "has_more": False,
-    })
+    logger.info(
+        "[preview-debug] agents.list success user_id=%s count=%s",
+        getattr(g, "user_id", None),
+        len(cleaned),
+    )
+    return jsonify(
+        {
+            "object": "list",
+            "data": cleaned,
+            "first_id": cleaned[0]["id"] if cleaned else "",
+            "last_id": cleaned[-1]["id"] if cleaned else "",
+            "has_more": False,
+        }
+    )
 
 
 @agents_bp.route("/api/agents", methods=["POST"])
@@ -95,7 +115,11 @@ def create_agent():
             system_prompt=data.get("instructions", ""),
         )
         data["bb_assistant_id"] = str(bb_assistant.assistant_id)
-        logger.warning("[agents] created Backboard assistant %s for agent %s", data["bb_assistant_id"], agent_id)
+        logger.warning(
+            "[agents] created Backboard assistant %s for agent %s",
+            data["bb_assistant_id"],
+            agent_id,
+        )
         await client.add_memory(
             assistant_id=assistant_id,
             content=json.dumps(data),
@@ -134,7 +158,11 @@ def get_agent(agent_id):
                     try:
                         a = json.loads(m.content)
                         if a.get("id") == agent_id and a.get("isPublic"):
-                            return {k: v for k, v in a.items() if not k.startswith("_memory")}
+                            return {
+                                k: v
+                                for k, v in a.items()
+                                if not k.startswith("_memory")
+                            }
                     except json.JSONDecodeError:
                         continue
             except Exception:
@@ -174,7 +202,10 @@ def update_agent(agent_id):
                         bb_assistant_id,
                         system_prompt=data["instructions"] or "",
                     )
-                    logger.warning("[agents] synced system_prompt to Backboard assistant %s", bb_assistant_id)
+                    logger.warning(
+                        "[agents] synced system_prompt to Backboard assistant %s",
+                        bb_assistant_id,
+                    )
 
             run_async(_update())
             return jsonify({k: v for k, v in a.items() if not k.startswith("_")})
@@ -191,9 +222,13 @@ def delete_agent(agent_id):
         if a.get("id") == agent_id:
             memory_id = a.get("_memory_id")
             if memory_id:
+
                 async def _del():
                     client = get_client()
-                    await client.delete_memory(assistant_id=assistant_id, memory_id=memory_id)
+                    await client.delete_memory(
+                        assistant_id=assistant_id, memory_id=memory_id
+                    )
+
                 run_async(_del())
             return jsonify({"message": "Deleted"})
     return jsonify({"error": "Not found"}), 404

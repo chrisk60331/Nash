@@ -27,6 +27,8 @@ import store from '~/store';
 
 const AuthContext = createContext<TAuthContext | undefined>(undefined);
 const PUBLIC_AUTH_PATH_RE = /(?:^|\/)(?:login|register|forgot-password|reset-password)(?:\/|$)/;
+const isPublicPreviewPath = (pathname: string) =>
+  pathname === '/preview' || pathname.startsWith('/preview/') || pathname === '/c' || pathname.startsWith('/c/');
 
 const AuthContextProvider = ({
   authConfig,
@@ -150,6 +152,7 @@ const AuthContextProvider = ({
 
   const silentRefresh = useCallback(() => {
     const isOnPublicAuthPage = PUBLIC_AUTH_PATH_RE.test(window.location.pathname);
+    const isOnPublicChatPreviewPage = isPublicPreviewPath(window.location.pathname);
     if (authConfig?.test === true) {
       console.log('Test mode. Skipping silent refresh.');
       return;
@@ -171,7 +174,7 @@ const AuthContextProvider = ({
           return;
         }
         console.log('Token is not present. User is not authenticated.');
-        if (authConfig?.test === true || isOnPublicAuthPage) {
+        if (authConfig?.test === true || isOnPublicAuthPage || isOnPublicChatPreviewPage) {
           return;
         }
         navigate(buildLoginRedirectUrl(), { replace: true });
@@ -189,7 +192,7 @@ const AuthContextProvider = ({
           return;
         }
         console.log('refreshToken mutation error:', error);
-        if (authConfig?.test === true || isOnPublicAuthPage) {
+        if (authConfig?.test === true || isOnPublicAuthPage || isOnPublicChatPreviewPage) {
           return;
         }
         navigate(buildLoginRedirectUrl(), { replace: true });
@@ -203,7 +206,9 @@ const AuthContextProvider = ({
       setUser(userQuery.data);
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
-      navigate(buildLoginRedirectUrl(), { replace: true });
+      if (!isPublicPreviewPath(window.location.pathname)) {
+        navigate(buildLoginRedirectUrl(), { replace: true });
+      }
     }
     if (error != null && error && isAuthenticated) {
       doSetError(undefined);

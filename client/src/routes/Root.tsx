@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
+import { useRecoilState } from 'recoil';
 import { useMediaQuery } from '@librechat/client';
 import type { ContextType } from '~/common';
 import {
@@ -21,16 +22,23 @@ import { Nav, MobileNav, NAV_WIDTH } from '~/components/Nav';
 import { CookieConsentBanner, MfaEnrollmentGate, TermsGate } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
+import { AuthModal } from '~/components/Auth';
+import { authModalTabAtom, showAuthModalAtom } from '~/store/authModal';
 
 export default function Root() {
   const [bannerHeight, setBannerHeight] = useState(0);
+  const [showAuthModal, setShowAuthModal] = useRecoilState(showAuthModalAtom);
+  const [authModalTab, setAuthModalTab] = useRecoilState(authModalTabAtom);
   const [navVisible, setNavVisible] = useState(() => {
     const savedNavVisible = localStorage.getItem('navVisible');
     return savedNavVisible !== null ? JSON.parse(savedNavVisible) : true;
   });
 
+  const location = useLocation();
   const { isAuthenticated, logout, user } = useAuthContext();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isAnonChatRoute = !isAuthenticated && location.pathname.startsWith('/c/');
+  const showNavigationShell = !isAnonChatRoute;
 
   useInitQuery({ enabled: isAuthenticated });
   useHealthCheck(isAuthenticated);
@@ -44,14 +52,14 @@ export default function Root() {
 
   useSearchEnabled(isAuthenticated);
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isAnonChatRoute) {
     return null;
   }
 
   const requiresMfaEnrollment =
     (user?.role ?? '').toUpperCase() === 'ADMIN' || startupConfig?.requireMfaForAllUsers === true;
 
-  if (requiresMfaEnrollment && user?.twoFactorEnabled !== true) {
+  if (isAuthenticated && requiresMfaEnrollment && user?.twoFactorEnabled !== true) {
     return (
       <MfaEnrollmentGate
         onDecline={() => logout('/login?redirect=false')}
@@ -61,7 +69,7 @@ export default function Root() {
   }
 
   // Block access until terms are explicitly accepted
-  if (termsData != null && !termsData.termsAccepted) {
+  if (isAuthenticated && termsData != null && !termsData.termsAccepted) {
     return <TermsGate onDecline={() => logout('/login?redirect=false')} />;
   }
 
@@ -74,11 +82,13 @@ export default function Root() {
               <Banner onHeightChange={setBannerHeight} />
               <div className="flex" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
                 <div className="relative z-0 flex h-full w-full overflow-hidden">
-                  <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
+                  {showNavigationShell && (
+                    <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
+                  )}
                   <div
                     className="relative flex h-full max-w-full flex-1 flex-col overflow-hidden"
                     style={
-                      isSmallScreen
+                      isSmallScreen && showNavigationShell
                         ? {
                             transform: navVisible
                               ? `translateX(${NAV_WIDTH.MOBILE}px)`
@@ -88,11 +98,23 @@ export default function Root() {
                         : undefined
                     }
                   >
-                    <MobileNav navVisible={navVisible} setNavVisible={setNavVisible} />
+                    {showNavigationShell && (
+                      <MobileNav navVisible={navVisible} setNavVisible={setNavVisible} />
+                    )}
                     <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
                   </div>
                 </div>
               </div>
+              <AuthModal
+                open={showAuthModal}
+                onOpenChange={(open) => {
+                  setShowAuthModal(open);
+                  if (!open) {
+                    setAuthModalTab('login');
+                  }
+                }}
+                defaultTab={authModalTab}
+              />
             </PromptGroupsProvider>
           </AgentsMapContext.Provider>
           <CookieConsentBanner />

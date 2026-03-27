@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRecoilCallback, useRecoilValue } from 'recoil';
 import { Spinner, useToastContext } from '@librechat/client';
@@ -16,6 +16,7 @@ import { useGetConvoIdQuery, useGetStartupConfig, useGetEndpointsQuery } from '~
 import { useGetSubscription } from '~/data-provider/Billing/queries';
 import { getDefaultModelSpec, getModelSpecPreset, logger, isNotFoundError } from '~/utils';
 import { ToolCallsMapProvider } from '~/Providers';
+import { readPendingChatDraft, clearPendingChatDraft } from '~/utils/auth/pendingChat';
 import ChatView from '~/components/Chat/ChatView';
 import { NotificationSeverity } from '~/common';
 import useAuthRedirect from './useAuthRedirect';
@@ -25,6 +26,7 @@ import store from '~/store';
 export default function ChatRoute() {
   const { data: startupConfig } = useGetStartupConfig();
   const { isAuthenticated, user, roles } = useAuthRedirect();
+  const resumedPendingDraftRef = useRef(false);
 
   const defaultTemporaryChat = useRecoilValue(temporaryStore.defaultTemporaryChat);
   const setIsTemporary = useRecoilCallback(
@@ -45,14 +47,14 @@ export default function ChatRoute() {
   const localize = useLocalize();
 
   const modelsQuery = useGetModelsQuery({
-    enabled: isAuthenticated,
+    enabled: true,
     refetchOnMount: 'always',
   });
   const initialConvoQuery = useGetConvoIdQuery(conversationId, {
     enabled:
       isAuthenticated && conversationId !== Constants.NEW_CONVO && !hasSetConversation.current,
   });
-  const endpointsQuery = useGetEndpointsQuery({ enabled: isAuthenticated });
+  const endpointsQuery = useGetEndpointsQuery();
   const billingEnabled = startupConfig?.billing?.enabled === true;
   const subscriptionQuery = useGetSubscription({
     enabled: isAuthenticated && billingEnabled,
@@ -76,8 +78,8 @@ export default function ChatRoute() {
    *  Adjusting this may have unintended consequences on the conversation state.
    */
   useEffect(() => {
-    // Wait for roles to load so hasAgentAccess has a definitive value in useNewConvo
-    const rolesLoaded = roles?.USER != null;
+    // Wait for roles to load for authenticated users so hasAgentAccess has a definitive value in useNewConvo
+    const rolesLoaded = !isAuthenticated || roles?.USER != null;
     const shouldSetConvo =
       (startupConfig &&
         rolesLoaded &&
@@ -90,7 +92,23 @@ export default function ChatRoute() {
       return;
     }
 
-    if (conversationId === Constants.NEW_CONVO && endpointsQuery.data && modelsQuery.data) {
+    if (
+      conversationId === Constants.NEW_CONVO &&
+      endpointsQuery.data &&
+      modelsQuery.data &&
+      !isAuthenticated
+    ) {
+      const result = getDefaultModelSpec(startupConfig);
+      const spec = result?.default ?? result?.last;
+      logger.log('conversation', 'ChatRoute, anonymous preview new convo effect', conversation);
+      newConversation({
+        modelsData: modelsQuery.data,
+        template: conversation ? conversation : undefined,
+        ...(spec ? { preset: getModelSpecPreset(spec) } : {}),
+      });
+
+      hasSetConversation.current = true;
+    } else if (conversationId === Constants.NEW_CONVO && endpointsQuery.data && modelsQuery.data) {
       const result = getDefaultModelSpec(startupConfig);
       const spec = result?.default ?? result?.last;
       logger.log('conversation', 'ChatRoute, new convo effect', conversation);
@@ -164,6 +182,7 @@ export default function ChatRoute() {
     /* Creates infinite render if all dependencies included due to newConversation invocations exceeding call stack before hasSetConversation.current becomes truthy */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    isAuthenticated,
     roles,
     startupConfig,
     billingReady,
@@ -174,9 +193,44 @@ export default function ChatRoute() {
     assistantListMap,
   ]);
 
+  useEffect(() => {
+    if (!isAuthenticated || resumedPendingDraftRef.current) {
+      return;
+    }
+
+    const pendingDraft = readPendingChatDraft();
+    if (!pendingDraft?.text) {
+      return;
+    }
+
+    resumedPendingDraftRef.current = true;
+
+    if (pendingDraft.autoSend) {
+      clearPendingChatDraft();
+      newConversation({
+        modelsData: modelsQuery.data,
+        template: (pendingDraft.conversation as TPreset | null) ?? undefined,
+        preset: (pendingDraft.conversation as TPreset | null) ?? undefined,
+      });
+
+      window.setTimeout(() => {
+        const submitEvent = new CustomEvent('submitPendingChatDraft', {
+          detail: {
+            text: pendingDraft.text,
+            addedConversation: pendingDraft.addedConversation ?? undefined,
+          },
+        });
+        window.dispatchEvent(submitEvent);
+      }, 50);
+      return;
+    }
+
+    clearPendingChatDraft();
+  }, [isAuthenticated, modelsQuery.data, newConversation]);
+
   if (
     endpointsQuery.isLoading ||
-    modelsQuery.isLoading ||
+    (isAuthenticated && modelsQuery.isLoading) ||
     (billingEnabled && subscriptionQuery.isLoading)
   ) {
     return (
@@ -187,7 +241,11 @@ export default function ChatRoute() {
   }
 
   if (!isAuthenticated) {
-    return null;
+    return (
+      <ToolCallsMapProvider conversationId={conversation?.conversationId ?? conversationId ?? ''}>
+        <ChatView index={index} />
+      </ToolCallsMapProvider>
+    );
   }
 
   // if not a conversation

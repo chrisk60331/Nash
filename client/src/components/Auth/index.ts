@@ -6,3 +6,4 @@ export { default as ApiErrorWatcher } from './ApiErrorWatcher';
 export { default as RequestPasswordReset } from './RequestPasswordReset';
 export { default as TwoFactorScreen } from './TwoFactorScreen';
 export { default as MfaEnrollmentScreen } from './MfaEnrollmentScreen';
+export { default as AuthModal } from './AuthModal';

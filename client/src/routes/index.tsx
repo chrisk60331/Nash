@@ -13,6 +13,7 @@ import { MarketplaceProvider } from '~/components/Agents/MarketplaceContext';
 import AgentMarketplace from '~/components/Agents/Marketplace';
 import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
+import { PreviewAuthProvider } from '~/hooks/PreviewAuthProvider';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import StartupLayout from './Layouts/Startup';
 import LoginLayout from './Layouts/Login';
@@ -28,6 +29,8 @@ import Terms from './Terms';
 import Cookies from './Cookies';
 import Docs from './Docs';
 import Enterprise from './Enterprise';
+import Landing from './Landing';
+import Preview from './Preview';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -41,6 +44,21 @@ const baseHref = baseEl?.getAttribute('href') || '/';
 
 export const router = createBrowserRouter(
   [
+    {
+      path: '/',
+      index: true,
+      element: <Landing />,
+      errorElement: <RouteErrorBoundary />,
+    },
+    {
+      path: 'preview',
+      element: (
+        <PreviewAuthProvider>
+          <Preview />
+        </PreviewAuthProvider>
+      ),
+      errorElement: <RouteErrorBoundary />,
+    },
     {
       path: 'docs',
       element: <Docs />,
@@ -136,10 +154,6 @@ export const router = createBrowserRouter(
           path: '/',
           element: <Root />,
           children: [
-            {
-              index: true,
-              element: <Navigate to="/c/new" replace={true} />,
-            },
             {
               path: 'c/:conversationId?',
               element: <ChatRoute />,

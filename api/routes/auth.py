@@ -1,12 +1,13 @@
 import json
 import logging
-import httpx
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
-from flask import Blueprint, request, redirect, jsonify, make_response
+import httpx
+from flask import Blueprint, jsonify, make_response, redirect, request
 
 from api.config import settings
+from api.middleware.csrf import csrf_protect
 from api.middleware.jwt_auth import (
     create_access_token,
     create_mfa_temp_token,
@@ -16,10 +17,9 @@ from api.middleware.jwt_auth import (
     decode_refresh_token,
 )
 from api.middleware.rate_limit import limiter
-from api.middleware.csrf import csrf_protect
-from api.services import audit_service
-from api.services import lockout_service
-from api.services.user_service import find_user_by_email, find_user_by_id, create_user, update_user_field, verify_password
+from api.services import audit_service, lockout_service
+from api.services.async_runner import run_async
+from api.services.backboard_service import get_client
 from api.services.mfa_service import (
     build_otpauth_url,
     generate_backup_codes,
@@ -30,13 +30,18 @@ from api.services.mfa_service import (
     verify_totp,
 )
 from api.services.org_security_service import get_org_security_config
-from api.services.backboard_service import get_client
-from api.services.async_runner import run_async
 from api.services.referral_service import (
     apply_referral_code_to_user,
     get_promo_code,
     redeem_promo_code,
     referral_code_exists,
+)
+from api.services.user_service import (
+    create_user,
+    find_user_by_email,
+    find_user_by_id,
+    update_user_field,
+    verify_password,
 )
 
 auth_bp = Blueprint("auth", __name__)
@@ -47,15 +52,26 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 _CONFIG_MIGRATE_TYPES = {
-    "thread_mapping", "conversation_meta",
-    "prompt", "prompt_group", "user_favorites",
-    "file_meta", "agent", "shared_link",
-    "tag", "folder", "preset", "user_memory",
+    "thread_mapping",
+    "conversation_meta",
+    "prompt",
+    "prompt_group",
+    "user_favorites",
+    "file_meta",
+    "agent",
+    "shared_link",
+    "tag",
+    "folder",
+    "preset",
+    "user_memory",
 }
 
 
-def _migrate_internal_memories(chat_assistant_id: str, config_assistant_id: str) -> None:
+def _migrate_internal_memories(
+    chat_assistant_id: str, config_assistant_id: str
+) -> None:
     """Copy internal memories from chat assistant to config assistant."""
+
     async def _do_migrate():
         client = get_client()
         response = await client.get_memories(chat_assistant_id)
@@ -71,18 +87,28 @@ def _migrate_internal_memories(chat_assistant_id: str, config_assistant_id: str)
                 metadata=meta,
             )
             count += 1
-        logger.info("[auth] migrated %d internal memories from %s to %s", count, chat_assistant_id, config_assistant_id)
+        logger.info(
+            "[auth] migrated %d internal memories from %s to %s",
+            count,
+            chat_assistant_id,
+            config_assistant_id,
+        )
 
     try:
         run_async(_do_migrate())
     except Exception:
-        logger.exception("Failed to migrate internal memories from %s to %s", chat_assistant_id, config_assistant_id)
+        logger.exception(
+            "Failed to migrate internal memories from %s to %s",
+            chat_assistant_id,
+            config_assistant_id,
+        )
 
 
 def _ensure_bb_assistant(user: dict) -> str:
     """Ensure user has both a chat assistant and a config assistant."""
     existing = user.get("bbAssistantId", "")
     if not existing:
+
         async def _create_chat():
             client = get_client()
             assistant = await client.create_assistant(
@@ -97,6 +123,7 @@ def _ensure_bb_assistant(user: dict) -> str:
     config_id = user.get("bbConfigAssistantId", "")
     needs_migration = False
     if not config_id:
+
         async def _create_config():
             client = get_client()
             assistant = await client.create_assistant(
@@ -161,10 +188,13 @@ def _set_refresh_cookie(response, refresh_token: str) -> None:
 
 def _mfa_required_for_user(user: dict) -> bool:
     org_config = get_org_security_config()
-    return mfa_requirement_for_user(
-        user.get("role", "USER"),
-        org_config.requireMfaForAllUsers,
-    ) == "required"
+    return (
+        mfa_requirement_for_user(
+            user.get("role", "USER"),
+            org_config.requireMfaForAllUsers,
+        )
+        == "required"
+    )
 
 
 def _issue_full_auth_response(user: dict):
@@ -172,7 +202,9 @@ def _issue_full_auth_response(user: dict):
     access_token = create_access_token(user_id)
     refresh_token = create_refresh_token(user_id)
     audit_service.emit("auth.login.success", user_id=user_id)
-    response = make_response(jsonify({"token": access_token, "user": _serialize_user(user)}))
+    response = make_response(
+        jsonify({"token": access_token, "user": _serialize_user(user)})
+    )
     _set_refresh_cookie(response, refresh_token)
     return response
 
@@ -182,7 +214,11 @@ def _issue_mfa_temp_response(user: dict, *, purpose: str):
     if purpose == "verify":
         audit_service.emit("auth.mfa.challenge_issued", user_id=user["id"])
         return jsonify({"twoFAPending": True, "tempToken": temp_token})
-    audit_service.emit("auth.mfa.enrollment_required", user_id=user["id"], role=user.get("role", "USER"))
+    audit_service.emit(
+        "auth.mfa.enrollment_required",
+        user_id=user["id"],
+        role=user.get("role", "USER"),
+    )
     return jsonify({"mfaSetupRequired": True, "tempToken": temp_token})
 
 
@@ -198,10 +234,17 @@ def _build_oauth_redirect(path: str):
     return make_response(html)
 
 
-def _resolve_2fa_subject(*, allow_temp: bool = False, required_purpose: str | None = None):
+def _resolve_2fa_subject(
+    *, allow_temp: bool = False, required_purpose: str | None = None
+):
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
-        return None, False, None, (jsonify({"error": "Missing or invalid authorization header"}), 401)
+        return (
+            None,
+            False,
+            None,
+            (jsonify({"error": "Missing or invalid authorization header"}), 401),
+        )
 
     token = auth_header[7:]
     payload = None
@@ -217,7 +260,11 @@ def _resolve_2fa_subject(*, allow_temp: bool = False, required_purpose: str | No
         except Exception:
             return None, False, None, (jsonify({"error": "Invalid token"}), 401)
 
-    if is_temp_token and required_purpose and payload.get("purpose") != required_purpose:
+    if (
+        is_temp_token
+        and required_purpose
+        and payload.get("purpose") != required_purpose
+    ):
         return None, False, payload, (jsonify({"error": "Invalid MFA session"}), 403)
 
     user_id = payload.get("sub")
@@ -231,14 +278,20 @@ def _resolve_2fa_subject(*, allow_temp: bool = False, required_purpose: str | No
     return user, is_temp_token, payload, None
 
 
-def _validate_active_factor(user: dict, *, token: str | None = None, backup_code: str | None = None) -> bool:
+def _validate_active_factor(
+    user: dict, *, token: str | None = None, backup_code: str | None = None
+) -> bool:
     if token and verify_totp(user.get("totpSecret", ""), token.strip()):
         return True
 
     if backup_code:
         result = validate_backup_code(user.get("backupCodes", []), backup_code)
         if result.valid:
-            update_user_field(user, "backupCodes", [record.model_dump(mode="json") for record in result.records])
+            update_user_field(
+                user,
+                "backupCodes",
+                [record.model_dump(mode="json") for record in result.records],
+            )
             audit_service.emit("auth.mfa.backup_code_used", user_id=user["id"])
             return True
 
@@ -264,7 +317,11 @@ def login():
             email_domain=email.split("@")[-1] if "@" in email else "",
             remaining_seconds=remaining,
         )
-        return jsonify({"message": f"Account temporarily locked. Try again in {remaining // 60 + 1} minutes."}), 429
+        return jsonify(
+            {
+                "message": f"Account temporarily locked. Try again in {remaining // 60 + 1} minutes."
+            }
+        ), 429
 
     user = find_user_by_email(email)
     if not user or not verify_password(user, password):
@@ -283,11 +340,18 @@ def login():
                 email_domain=email.split("@")[-1] if "@" in email else "",
                 remaining_seconds=lockout_service.lockout_remaining_seconds(email),
             )
-            return jsonify({"message": "Too many failed attempts. Account locked for 15 minutes."}), 429
+            return jsonify(
+                {"message": "Too many failed attempts. Account locked for 15 minutes."}
+            ), 429
         return jsonify({"message": "Incorrect email or password"}), 401
 
     if user.get("active") is False:
-        audit_service.emit("auth.login.failure", result="blocked", reason="account_disabled", user_id=user["id"])
+        audit_service.emit(
+            "auth.login.failure",
+            result="blocked",
+            reason="account_disabled",
+            user_id=user["id"],
+        )
         return jsonify({"message": "Account is disabled."}), 403
 
     lockout_service.record_success(email)
@@ -306,7 +370,9 @@ def login():
 @limiter.limit("5 per hour")
 def register():
     if not settings.allow_registration:
-        audit_service.emit("auth.register.failure", result="fail", reason="registration_disabled")
+        audit_service.emit(
+            "auth.register.failure", result="fail", reason="registration_disabled"
+        )
         return jsonify({"message": "Registration is disabled"}), 403
 
     data = request.get_json(silent=True) or {}
@@ -318,16 +384,22 @@ def register():
     promo_code = (data.get("promoCode") or data.get("promo") or "").strip().upper()
 
     if not name or not email or not password:
-        audit_service.emit("auth.register.failure", result="fail", reason="missing_fields")
+        audit_service.emit(
+            "auth.register.failure", result="fail", reason="missing_fields"
+        )
         return jsonify({"message": "Name, email, and password are required"}), 400
 
     if len(password) < 8:
-        audit_service.emit("auth.register.failure", result="fail", reason="password_too_short")
+        audit_service.emit(
+            "auth.register.failure", result="fail", reason="password_too_short"
+        )
         return jsonify({"message": "Password must be at least 8 characters"}), 400
 
     existing = find_user_by_email(email)
     if existing:
-        audit_service.emit("auth.register.failure", result="fail", reason="email_exists")
+        audit_service.emit(
+            "auth.register.failure", result="fail", reason="email_exists"
+        )
         return jsonify({"message": "A user with this email already exists"}), 409
     if referral_code and not referral_code_exists(referral_code):
         return jsonify({"message": "Referral code not found"}), 400
@@ -376,18 +448,22 @@ def enable_two_factor():
 
     secret = generate_totp_secret()
     backup_codes = generate_backup_codes()
-    pending_backup_codes = [record.model_dump(mode="json") for record in hash_backup_codes(backup_codes)]
+    pending_backup_codes = [
+        record.model_dump(mode="json") for record in hash_backup_codes(backup_codes)
+    ]
     update_user_field(user, "pendingTotpSecret", secret)
     update_user_field(user, "pendingBackupCodes", pending_backup_codes)
     audit_service.emit("auth.mfa.setup_started", user_id=user["id"])
-    return jsonify({
-        "otpauthUrl": build_otpauth_url(
-            secret=secret,
-            issuer=settings.app_title,
-            account_name=user.get("email", user["id"]),
-        ),
-        "backupCodes": backup_codes,
-    })
+    return jsonify(
+        {
+            "otpauthUrl": build_otpauth_url(
+                secret=secret,
+                issuer=settings.app_title,
+                account_name=user.get("email", user["id"]),
+            ),
+            "backupCodes": backup_codes,
+        }
+    )
 
 
 @auth_bp.route("/api/auth/2fa/verify", methods=["POST"])
@@ -421,7 +497,12 @@ def confirm_two_factor():
     if error_response:
         return error_response
     if user.get("active") is False:
-        audit_service.emit("auth.mfa.confirm.failure", result="blocked", reason="account_disabled", user_id=user["id"])
+        audit_service.emit(
+            "auth.mfa.confirm.failure",
+            result="blocked",
+            reason="account_disabled",
+            user_id=user["id"],
+        )
         return jsonify({"message": "Account is disabled."}), 403
 
     data = request.get_json(silent=True) or {}
@@ -431,7 +512,9 @@ def confirm_two_factor():
     if not pending_secret or not pending_backup_codes:
         return jsonify({"message": "No pending MFA enrollment"}), 400
     if not verify_totp(pending_secret, token):
-        audit_service.emit("auth.mfa.confirm.failure", result="fail", user_id=user["id"])
+        audit_service.emit(
+            "auth.mfa.confirm.failure", result="fail", user_id=user["id"]
+        )
         return jsonify({"message": "Invalid authentication code"}), 400
 
     update_user_field(user, "totpSecret", pending_secret)
@@ -444,11 +527,15 @@ def confirm_two_factor():
     if is_temp_token:
         access_token = create_access_token(user["id"])
         refresh_token = create_refresh_token(user["id"])
-        response = make_response(jsonify({
-            "message": "Two-factor authentication enabled",
-            "token": access_token,
-            "user": _serialize_user(user),
-        }))
+        response = make_response(
+            jsonify(
+                {
+                    "message": "Two-factor authentication enabled",
+                    "token": access_token,
+                    "user": _serialize_user(user),
+                }
+            )
+        )
         _set_refresh_cookie(response, refresh_token)
         return response
 
@@ -465,7 +552,9 @@ def disable_two_factor():
     token = (data.get("token") or "").strip() or None
     backup_code = (data.get("backupCode") or "").strip() or None
     if not _validate_active_factor(user, token=token, backup_code=backup_code):
-        audit_service.emit("auth.mfa.disable.failure", result="fail", user_id=user["id"])
+        audit_service.emit(
+            "auth.mfa.disable.failure", result="fail", user_id=user["id"]
+        )
         return jsonify({"message": "Invalid authentication code"}), 400
 
     update_user_field(user, "twoFactorEnabled", False)
@@ -486,14 +575,18 @@ def regenerate_backup_codes():
         return jsonify({"message": "Two-factor authentication is not enabled"}), 400
 
     backup_codes = generate_backup_codes()
-    hashed_codes = [record.model_dump(mode="json") for record in hash_backup_codes(backup_codes)]
+    hashed_codes = [
+        record.model_dump(mode="json") for record in hash_backup_codes(backup_codes)
+    ]
     update_user_field(user, "backupCodes", hashed_codes)
     audit_service.emit("auth.mfa.backup_codes_regenerated", user_id=user["id"])
-    return jsonify({
-        "message": "Backup codes regenerated",
-        "backupCodes": backup_codes,
-        "backupCodesHash": [record["codeHash"] for record in hashed_codes],
-    })
+    return jsonify(
+        {
+            "message": "Backup codes regenerated",
+            "backupCodes": backup_codes,
+            "backupCodesHash": [record["codeHash"] for record in hashed_codes],
+        }
+    )
 
 
 @auth_bp.route("/api/auth/2fa/verify-temp", methods=["POST"])
@@ -517,22 +610,33 @@ def verify_two_factor_temp():
     if not user:
         return jsonify({"message": "User not found"}), 404
     if user.get("active") is False:
-        audit_service.emit("auth.mfa.challenge_failed", result="blocked", reason="account_disabled", user_id=user["id"])
+        audit_service.emit(
+            "auth.mfa.challenge_failed",
+            result="blocked",
+            reason="account_disabled",
+            user_id=user["id"],
+        )
         return jsonify({"message": "Account is disabled."}), 403
     if not user.get("twoFactorEnabled"):
         return jsonify({"message": "Two-factor authentication is not enabled"}), 400
     if not _validate_active_factor(user, token=token, backup_code=backup_code):
-        audit_service.emit("auth.mfa.challenge_failed", result="fail", user_id=user["id"])
+        audit_service.emit(
+            "auth.mfa.challenge_failed", result="fail", user_id=user["id"]
+        )
         return jsonify({"message": "Invalid authentication code"}), 400
 
     access_token = create_access_token(user["id"])
     refresh_token = create_refresh_token(user["id"])
     audit_service.emit("auth.mfa.challenge_completed", user_id=user["id"])
-    response = make_response(jsonify({
-        "token": access_token,
-        "user": _serialize_user(user),
-        "message": "Authentication complete",
-    }))
+    response = make_response(
+        jsonify(
+            {
+                "token": access_token,
+                "user": _serialize_user(user),
+                "message": "Authentication complete",
+            }
+        )
+    )
     _set_refresh_cookie(response, refresh_token)
     return response
 
@@ -575,15 +679,23 @@ def oauth_google_callback():
     promo_code = str(state_payload.get("promo") or "").strip().upper()
 
     callback_url = f"{settings.domain_server}{settings.google_callback_url}"
-    token_resp = httpx.post(GOOGLE_TOKEN_URL, data={
-        "code": code,
-        "client_id": settings.google_client_id,
-        "client_secret": settings.google_client_secret,
-        "redirect_uri": callback_url,
-        "grant_type": "authorization_code",
-    })
+    token_resp = httpx.post(
+        GOOGLE_TOKEN_URL,
+        data={
+            "code": code,
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "redirect_uri": callback_url,
+            "grant_type": "authorization_code",
+        },
+    )
     if token_resp.status_code != 200:
-        audit_service.emit("auth.oauth.failure", result="fail", provider="google", reason="token_exchange_failed")
+        audit_service.emit(
+            "auth.oauth.failure",
+            result="fail",
+            provider="google",
+            reason="token_exchange_failed",
+        )
         return redirect(f"{settings.domain_client}/login?error=token_exchange_failed")
 
     tokens = token_resp.json()
@@ -594,7 +706,12 @@ def oauth_google_callback():
         headers={"Authorization": f"Bearer {google_access_token}"},
     )
     if userinfo_resp.status_code != 200:
-        audit_service.emit("auth.oauth.failure", result="fail", provider="google", reason="userinfo_failed")
+        audit_service.emit(
+            "auth.oauth.failure",
+            result="fail",
+            provider="google",
+            reason="userinfo_failed",
+        )
         return redirect(f"{settings.domain_client}/login?error=userinfo_failed")
 
     userinfo = userinfo_resp.json()
@@ -612,8 +729,15 @@ def oauth_google_callback():
     is_new_user = user is None
     if user is None:
         if not settings.allow_social_registration:
-            audit_service.emit("auth.oauth.failure", result="fail", provider="google", reason="registration_disabled")
-            return redirect(f"{settings.domain_client}/login?error=registration_disabled")
+            audit_service.emit(
+                "auth.oauth.failure",
+                result="fail",
+                provider="google",
+                reason="registration_disabled",
+            )
+            return redirect(
+                f"{settings.domain_client}/login?error=registration_disabled"
+            )
         user = create_user(
             email=email,
             name=name,
@@ -622,7 +746,13 @@ def oauth_google_callback():
         )
 
     if user.get("active") is False:
-        audit_service.emit("auth.oauth.failure", result="blocked", provider="google", reason="account_disabled", user_id=user["id"])
+        audit_service.emit(
+            "auth.oauth.failure",
+            result="blocked",
+            provider="google",
+            reason="account_disabled",
+            user_id=user["id"],
+        )
         return redirect(f"{settings.domain_client}/login?error=account_disabled")
 
     _ensure_bb_assistant(user)
@@ -630,12 +760,16 @@ def oauth_google_callback():
         try:
             apply_referral_code_to_user(user, referral_code)
         except ValueError:
-            logger.warning("[auth] ignored invalid referral code during google login for %s", email)
+            logger.warning(
+                "[auth] ignored invalid referral code during google login for %s", email
+            )
     if promo_code:
         try:
             redeem_promo_code(user["id"], promo_code)
         except ValueError:
-            logger.warning("[auth] ignored invalid promo code during google login for %s", email)
+            logger.warning(
+                "[auth] ignored invalid promo code during google login for %s", email
+            )
 
     audit_service.emit(
         "auth.oauth.success",
@@ -674,23 +808,48 @@ def oauth_google_callback():
 @csrf_protect
 def refresh():
     refresh_token = request.cookies.get("refreshToken")
+    logger.info(
+        "[preview-debug] auth.refresh request method=%s path=%s has_refresh_cookie=%s origin=%s referer=%s",
+        request.method,
+        request.path,
+        bool(refresh_token),
+        request.headers.get("Origin"),
+        request.headers.get("Referer"),
+    )
     if not refresh_token:
+        logger.info(
+            "[preview-debug] auth.refresh returning empty token: missing refreshToken cookie"
+        )
         return jsonify({"token": "", "user": None})
 
     try:
         payload = decode_refresh_token(refresh_token)
     except Exception:
-        audit_service.emit("auth.refresh.failure", result="fail", reason="invalid_token")
+        logger.warning("[preview-debug] auth.refresh failed: invalid refresh token")
+        audit_service.emit(
+            "auth.refresh.failure", result="fail", reason="invalid_token"
+        )
         return jsonify({"token": "", "user": None})
 
     user_id = payload.get("sub")
     if not user_id:
+        logger.warning(
+            "[preview-debug] auth.refresh failed: missing sub in refresh token payload"
+        )
         audit_service.emit("auth.refresh.failure", result="fail", reason="missing_sub")
         return jsonify({"token": "", "user": None})
 
     user = find_user_by_id(user_id)
     if user and user.get("active") is False:
-        audit_service.emit("auth.refresh.failure", result="blocked", reason="account_disabled", user_id=user_id)
+        logger.warning(
+            "[preview-debug] auth.refresh blocked: disabled account user_id=%s", user_id
+        )
+        audit_service.emit(
+            "auth.refresh.failure",
+            result="blocked",
+            reason="account_disabled",
+            user_id=user_id,
+        )
         response = make_response(jsonify({"token": "", "user": None}))
         response.delete_cookie("refreshToken", path="/")
         return response
@@ -702,6 +861,11 @@ def refresh():
         _ensure_bb_assistant(user)
     user_data = _serialize_user(user) if user else None
 
+    logger.info(
+        "[preview-debug] auth.refresh success user_id=%s user_found=%s",
+        user_id,
+        bool(user),
+    )
     audit_service.emit("auth.refresh.success", user_id=user_id)
 
     response = make_response(jsonify({"token": new_access_token, "user": user_data}))
