@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { Command, DollarSign, MessageSquare, ChevronRight } from 'lucide-react';
+import Presentation from '~/components/Chat/Presentation';
 import {
   DataIcon,
   GearIcon,
@@ -196,8 +197,42 @@ export default function SettingsRoute() {
 
   if (tab && !activeSection) {
     return (
+      <Presentation>
+        <div className="h-full overflow-y-auto bg-presentation">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm text-text-secondary">
+              <Link className="transition-colors hover:text-text-primary" to="/c/new">
+                {localize('com_ui_chat')}
+              </Link>
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              <Link className="transition-colors hover:text-text-primary" to="/settings">
+                {localize('com_nav_settings')}
+              </Link>
+            </nav>
+            <div className="rounded-2xl border border-border-light bg-background/70 p-6">
+              <h1 className="text-xl font-semibold text-text-primary">{localize('com_nav_settings')}</h1>
+              <p className="mt-2 text-sm text-text-secondary">
+                That settings section does not exist. Pick one of the available sections below.
+              </p>
+              <div className="mt-4">
+                <Link
+                  to="/settings"
+                  className="inline-flex rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700"
+                >
+                  Back to settings
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Presentation>
+    );
+  }
+
+  return (
+    <Presentation>
       <div className="h-full overflow-y-auto bg-presentation">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
           <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm text-text-secondary">
             <Link className="transition-colors hover:text-text-primary" to="/c/new">
               {localize('com_ui_chat')}
@@ -206,105 +241,75 @@ export default function SettingsRoute() {
             <Link className="transition-colors hover:text-text-primary" to="/settings">
               {localize('com_nav_settings')}
             </Link>
+            {activeSection && (
+              <>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                <span className="text-text-primary">{localize(activeSection.label)}</span>
+              </>
+            )}
           </nav>
-          <div className="rounded-2xl border border-border-light bg-background/70 p-6">
-            <h1 className="text-xl font-semibold text-text-primary">{localize('com_nav_settings')}</h1>
-            <p className="mt-2 text-sm text-text-secondary">
-              That settings section does not exist. Pick one of the available sections below.
-            </p>
-            <div className="mt-4">
-              <Link
-                to="/settings"
-                className="inline-flex rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700"
-              >
-                Back to settings
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="h-full overflow-y-auto bg-presentation">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm text-text-secondary">
-          <Link className="transition-colors hover:text-text-primary" to="/c/new">
-            {localize('com_ui_chat')}
-          </Link>
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          <Link className="transition-colors hover:text-text-primary" to="/settings">
-            {localize('com_nav_settings')}
-          </Link>
-          {activeSection && (
+          {!activeSection ? (
             <>
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              <span className="text-text-primary">{localize(activeSection.label)}</span>
-            </>
-          )}
-        </nav>
-
-        {!activeSection ? (
-          <>
-            <div className="max-w-3xl">
-              <h1 className="text-2xl font-semibold text-text-primary sm:text-3xl">
-                {localize('com_nav_settings')}
-              </h1>
-              <p className="mt-2 text-sm leading-6 text-text-secondary sm:text-base">
-                Pick a section instead of scrolling through one long modal. Each section now has its
-                own page and breadcrumb.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {sections.map((section) => (
-                <SettingsOverviewCard
-                  key={section.value}
-                  href={`/settings/${section.value}`}
-                  icon={section.icon}
-                  title={localize(section.label)}
-                  description={section.description}
-                />
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
                 <h1 className="text-2xl font-semibold text-text-primary sm:text-3xl">
-                  {localize(activeSection.label)}
+                  {localize('com_nav_settings')}
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-text-secondary sm:text-base">
-                  {activeSection.description}
+                  Pick a section instead of scrolling through one long modal. Each section now has its
+                  own page and breadcrumb.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {sections.map((section) => (
-                  <Link
+                  <SettingsOverviewCard
                     key={section.value}
-                    to={`/settings/${section.value}`}
-                    className={cn(
-                      'rounded-xl border px-3 py-2 text-sm transition-colors',
-                      section.value === activeSection.value
-                        ? 'border-violet-500/40 bg-violet-500/10 text-text-primary'
-                        : 'border-border-light bg-background/60 text-text-secondary hover:text-text-primary',
-                    )}
-                  >
-                    {localize(section.label)}
-                  </Link>
+                    href={`/settings/${section.value}`}
+                    icon={section.icon}
+                    title={localize(section.label)}
+                    description={section.description}
+                  />
                 ))}
               </div>
-            </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-3xl">
+                  <h1 className="text-2xl font-semibold text-text-primary sm:text-3xl">
+                    {localize(activeSection.label)}
+                  </h1>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary sm:text-base">
+                    {activeSection.description}
+                  </p>
+                </div>
 
-            <div className="rounded-2xl border border-border-light bg-background/70 p-3 sm:p-5">
-              <SettingsSectionContent section={activeSection} hasMemoryOptOut={hasMemoryOptOut} />
-            </div>
-          </>
-        )}
+                <div className="flex flex-wrap gap-2">
+                  {sections.map((section) => (
+                    <Link
+                      key={section.value}
+                      to={`/settings/${section.value}`}
+                      className={cn(
+                        'rounded-xl border px-3 py-2 text-sm transition-colors',
+                        section.value === activeSection.value
+                          ? 'border-violet-500/40 bg-violet-500/10 text-text-primary'
+                          : 'border-border-light bg-background/60 text-text-secondary hover:text-text-primary',
+                      )}
+                    >
+                      {localize(section.label)}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border-light bg-background/70 p-3 sm:p-5">
+                <SettingsSectionContent section={activeSection} hasMemoryOptOut={hasMemoryOptOut} />
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </Presentation>
   );
 }

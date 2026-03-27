@@ -1,5 +1,11 @@
 [
     {
+        "body": "**Hotfix release**\n\n- **Billing page drawer restore:** Wrapped `/billing` in the shared presentation layout so the right-side drawer expander is available again after the drawer is closed.\n- **Settings page drawer restore:** Applied the same presentation layout to `/settings`, including section and invalid-section states, so the right-side drawer expander remains accessible there as well.\n- **Release metadata:** Bumped application and package versions to `v2.15.2`.",
+        "publishedAt": "2026-03-27T04:07:49Z",
+        "tagName": "v2.15.2",
+        "title": "v2.15.2"
+    },
+    {
         "body": "**Hotfix release**\n\n- **Credit-funded overage billing:** Free-tier overage can now spend token credits using model-specific pricing from `librechat.yaml`, using exact `input_tokens` and `output_tokens` from Backboard runs instead of a flat average.\n- **Paid-plan fallback flow:** Plus/Unlimited users who exhaust included usage now fall back to a free model when no credits or Stripe metering are available, with a prepended downgrade/upsell notice and conversation metadata updated to the actual fallback model.\n- **Billing and test tooling:** Added scripts to inspect and set user token usage, credits, and plans for UI testing, and synced `librechat.yaml` model pricing from the model list CSV so free-vs-paid gating follows config rather than hardcoded model exceptions.",
         "publishedAt": "2026-03-27T00:00:00Z",
         "tagName": "v2.15.1",
