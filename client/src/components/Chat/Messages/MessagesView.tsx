@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import { CSSTransition } from 'react-transition-group';
@@ -34,6 +34,21 @@ function MessagesViewContent({
 
   const { conversationId } = conversation ?? {};
 
+  const handleCopy = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const fragment = range.cloneContents();
+    const tmp = document.createElement('div');
+    tmp.appendChild(fragment);
+    const html = `<div style="background-color:white;color:#111111;">${tmp.innerHTML}</div>`;
+    e.clipboardData.setData('text/html', html);
+    e.clipboardData.setData('text/plain', selection.toString());
+    e.preventDefault();
+  }, []);
+
   return (
     <>
       <div className="relative flex-1 overflow-hidden overflow-y-auto">
@@ -60,7 +75,7 @@ function MessagesViewContent({
                 </div>
               ) : (
                 <>
-                  <div ref={screenshotTargetRef}>
+                  <div ref={screenshotTargetRef} onCopy={handleCopy}>
                     <MultiMessage
                       key={conversationId}
                       messagesTree={_messagesTree}

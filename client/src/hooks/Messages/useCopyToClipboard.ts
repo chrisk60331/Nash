@@ -33,7 +33,8 @@ function getRenderedHtml(messageId?: string | null): string | null {
   }
   const clone = contentEl.cloneNode(true) as HTMLElement;
   clone.querySelectorAll('button, .copy-button, .hover-button').forEach((el) => el.remove());
-  return clone.innerHTML;
+  // Wrap with explicit light-mode styles so Chrome doesn't inherit the dark page background on paste
+  return `<div style="background-color:white;color:#111111;">${clone.innerHTML}</div>`;
 }
 
 function copyWithRichText(plainText: string, messageId?: string | null): void {
